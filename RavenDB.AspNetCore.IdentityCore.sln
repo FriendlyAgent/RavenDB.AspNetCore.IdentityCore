@@ -1,0 +1,45 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26403.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{95EFBEAD-28E8-4E49-A171-69CF6C7EAA30}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{F6F95D85-23E5-4484-89EA-8876BDEF68D8}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RavenDB.AspNetCore.IdentityCore", "src\RavenDB.AspNetCore.IdentityCore\RavenDB.AspNetCore.IdentityCore.csproj", "{8941289C-627C-44B4-B530-2BF383F856A5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E23A9941-2898-423C-8F93-D9B4D1EC2201}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RavenDB.AspNetCore.IdentityCore.Test", "tests\RavenDB.AspNetCore.IdentityCore.Test\RavenDB.AspNetCore.IdentityCore.Test.csproj", "{A341811C-C0F7-443B-8169-E5B79A972647}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.MVC.Sample", "samples\Identity.MVC.Sample\Identity.MVC.Sample.csproj", "{818E5DCC-AD29-426A-808D-2E177C8182B7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8941289C-627C-44B4-B530-2BF383F856A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8941289C-627C-44B4-B530-2BF383F856A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8941289C-627C-44B4-B530-2BF383F856A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8941289C-627C-44B4-B530-2BF383F856A5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A341811C-C0F7-443B-8169-E5B79A972647}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A341811C-C0F7-443B-8169-E5B79A972647}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A341811C-C0F7-443B-8169-E5B79A972647}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A341811C-C0F7-443B-8169-E5B79A972647}.Release|Any CPU.Build.0 = Release|Any CPU
+		{818E5DCC-AD29-426A-808D-2E177C8182B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{818E5DCC-AD29-426A-808D-2E177C8182B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{818E5DCC-AD29-426A-808D-2E177C8182B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{818E5DCC-AD29-426A-808D-2E177C8182B7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{8941289C-627C-44B4-B530-2BF383F856A5} = {95EFBEAD-28E8-4E49-A171-69CF6C7EAA30}
+		{A341811C-C0F7-443B-8169-E5B79A972647} = {E23A9941-2898-423C-8F93-D9B4D1EC2201}
+		{818E5DCC-AD29-426A-808D-2E177C8182B7} = {F6F95D85-23E5-4484-89EA-8876BDEF68D8}
+	EndGlobalSection
+EndGlobal
