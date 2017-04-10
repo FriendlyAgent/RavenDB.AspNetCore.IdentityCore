@@ -7,7 +7,7 @@ using RavenDB.AspNetCore.IdentityCore.Entities;
 using System;
 using System.Reflection;
 
-namespace RavenDB.AspNetCore.Identity.Extensions
+namespace RavenDB.AspNetCore.IdentityCore.Extensions
 {
     /// <summary>
     /// Contains extension methods to <see cref="IdentityBuilder"/> for adding ravendb compatibel stores.
