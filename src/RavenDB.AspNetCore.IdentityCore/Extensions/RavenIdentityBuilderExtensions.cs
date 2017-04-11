@@ -2,7 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Raven.Client.Documents.Session;
-using RavenDB.AspNetCore.IdentityCore;
 using RavenDB.AspNetCore.IdentityCore.Entities;
 using System;
 using System.Reflection;
@@ -14,6 +13,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
     /// </summary>
     public static class RavenIdentityBuilderExtensions
     {
+        /// <summary>
+        /// Adds an ravendb implementation of identity information stores.
+        /// </summary>
+        /// <param name="builder">The <see cref="IdentityBuilder"/> instance this method extends.</param>
+        /// <param name="getSession">The action used to get the desired session.</param>
+        /// <returns>The <see cref="IdentityBuilder"/> instance this method extends.</returns>
         public static IdentityBuilder AddRavenStores(
             this IdentityBuilder builder,
             Func<IServiceProvider, IAsyncDocumentSession> getSession)
@@ -32,6 +37,13 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             return builder.AddRavenStores<IAsyncDocumentSession>();
         }
 
+        /// <summary>
+        /// Adds an ravendb implementation of identity information stores.
+        /// </summary>
+        /// <typeparam name="TSession">The type of the data context class used to access the session.</typeparam>
+        /// <param name="builder">The <see cref="IdentityBuilder"/> instance this method extends.</param>
+        /// <param name="getSession">The action used to get the desired session.</param>
+        /// <returns>The <see cref="IdentityBuilder"/> instance this method extends.</returns>
         public static IdentityBuilder AddRavenStores<TSession>(
             this IdentityBuilder builder,
              Func<IServiceProvider, TSession> getSession)
@@ -64,11 +76,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
         {
             var identityUserType = FindGenericBaseType(userType, typeof(IdentityUser<,,>));
             if (identityUserType == null)
-                throw new InvalidOperationException("stfuu");
+                throw new InvalidOperationException();
 
             var identityRoleType = FindGenericBaseType(roleType, typeof(IdentityRole<>));
             if (identityRoleType == null)
-                throw new InvalidOperationException("stfuu2");
+                throw new InvalidOperationException();
 
             services.TryAddScoped(
                 typeof(IUserStore<>).MakeGenericType(userType),

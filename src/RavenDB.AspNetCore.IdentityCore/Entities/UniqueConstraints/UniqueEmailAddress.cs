@@ -1,8 +1,8 @@
 ﻿namespace RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints
 {
-   /// <summary>
-   /// 
-   /// </summary>
+    /// <summary>
+    /// The class responsible for unique email adresses.
+    /// </summary>
     public class UniqueEmailAddress
     {
         /// <summary>

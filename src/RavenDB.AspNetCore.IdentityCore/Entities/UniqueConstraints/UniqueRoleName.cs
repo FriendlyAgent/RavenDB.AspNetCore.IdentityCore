@@ -1,6 +1,9 @@
 ﻿namespace RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints
 {
-    class UniqueRoleName
+    /// <summary>
+    /// The class responsible for unique role names.
+    /// </summary>
+    public class UniqueRoleName
     {
         /// <summary>
         /// Initializes a new instance of <see cref="UniqueRoleName"/>.

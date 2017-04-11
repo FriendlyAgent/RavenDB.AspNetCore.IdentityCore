@@ -9,6 +9,7 @@ using System.Linq;
 using Raven.Client.Documents;
 using Raven.Client.Exceptions;
 using RavenDB.AspNetCore.IdentityCore.Entities;
+using RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints;
 
 namespace RavenDB.AspNetCore.IdentityCore
 {
@@ -178,11 +179,9 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// </summary>
         /// <param name="role">The role for which to create the constraint.</param>
         /// <returns></returns>
-        public static UniqueConstraint<IdentityRole> ToRoleNameConstraint(IdentityRole role)
+        public static UniqueRoleName ToRoleNameConstraint(IdentityRole role)
         {
-            return new UniqueConstraint<IdentityRole>(
-                role.RoleName,
-                a => a.RoleName);
+            return new UniqueRoleName(role.RoleName);
         }
 
         /// <summary>
@@ -227,8 +226,7 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
                 }
 
-                // Not part of what we expect so not our problem.
-                throw;
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
             }
             finally
             {
@@ -249,14 +247,21 @@ namespace RavenDB.AspNetCore.IdentityCore
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             if (role == null)
-                 throw new ArgumentNullException(nameof(role));
+                throw new ArgumentNullException(nameof(role));
 
-            var uniqueRoleNameConstraint = ToRoleNameConstraint(role);
+            try
+            {
+                var uniqueRoleNameConstraint = ToRoleNameConstraint(role);
 
-            _session.Delete(uniqueRoleNameConstraint.Id);
-            _session.Delete(role);
+                _session.Delete(uniqueRoleNameConstraint.Id);
+                _session.Delete(role);
 
-            await SaveChanges(cancellationToken: cancellationToken);
+                await SaveChanges(cancellationToken: cancellationToken);
+            }
+            catch (ConcurrencyException)
+            {
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+            }
 
             return IdentityResult.Success;
         }
@@ -435,9 +440,16 @@ namespace RavenDB.AspNetCore.IdentityCore
             if (role == null)
                 throw new ArgumentNullException(nameof(role));
 
-            role.ConcurrencyStamp = Guid.NewGuid().ToString();
+            try
+            {
+                role.ConcurrencyStamp = Guid.NewGuid().ToString();
 
-            await SaveChanges(cancellationToken: cancellationToken);
+                await SaveChanges(cancellationToken: cancellationToken);
+            }
+            catch (ConcurrencyException)
+            {
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+            }
 
             return IdentityResult.Success;
         }

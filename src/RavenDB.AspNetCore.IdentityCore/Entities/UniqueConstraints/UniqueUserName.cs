@@ -1,18 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints
+﻿namespace RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints
 {
     /// <summary>
-    /// 
+    /// The class responsible for unique user names.
     /// </summary>
     public class UniqueUserName
     {
         /// <summary>
-        /// 
+        /// Initializes a new instance of <see cref="UniqueUserName"/>.
         /// </summary>
-        /// <param name="value"></param>
+        /// <param name="value">The value that need to be unique.</param>
         public UniqueUserName(
            string value)
         {

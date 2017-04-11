@@ -6,6 +6,7 @@ using Raven.Client.Documents.Linq;
 using Raven.Client.Documents.Session;
 using Raven.Client.Exceptions;
 using RavenDB.AspNetCore.IdentityCore.Entities;
+using RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints;
 using RavenDB.AspNetCore.IdentityCore.Occurences;
 using System;
 using System.Collections.Generic;
@@ -342,11 +343,9 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// </summary>
         /// <param name="user">The user for which to create the constraint.</param>
         /// <returns></returns>
-        public static UniqueConstraint<IdentityUser> ToUserNameConstraint(IdentityUser user)
+        public static UniqueUserName ToUserNameConstraint(IdentityUser user)
         {
-            return new UniqueConstraint<IdentityUser>(
-                user.UserName,
-                a => a.UserName);
+            return new UniqueUserName(user.UserName);
         }
 
         /// <summary>
@@ -354,11 +353,9 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// </summary>
         /// <param name="user">The user for which to create the constraint.</param>
         /// <returns></returns>
-        public static UniqueConstraint<IdentityUser> ToEmailAddressConstraint(IdentityUser user)
+        public static UniqueEmailAddress ToEmailAddressConstraint(IdentityUser user)
         {
-            return new UniqueConstraint<IdentityUser>(
-                user.EmailAddress.Email,
-                a => a.EmailAddress.Email);
+            return new UniqueEmailAddress(user.EmailAddress.Email);
         }
 
         /// <summary>
@@ -419,8 +416,7 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .Failed(ErrorDescriber.DuplicateEmail(user.EmailAddress.Email));
                 }
 
-                // Not part of what we expect so not our problem.
-                throw;
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
             }
             finally
             {
@@ -443,14 +439,21 @@ namespace RavenDB.AspNetCore.IdentityCore
             if (user == null)
                 throw new ArgumentNullException(nameof(user));
 
-            var uniqueUserNameConstraint = ToUserNameConstraint(user);
-            var uniqueEmailAddressConstraint = ToEmailAddressConstraint(user);
+            try
+            {
+                var uniqueUserNameConstraint = ToUserNameConstraint(user);
+                var uniqueEmailAddressConstraint = ToEmailAddressConstraint(user);
 
-            _session.Delete(uniqueUserNameConstraint.Id);
-            _session.Delete(uniqueEmailAddressConstraint.Id);
-            _session.Delete(user);
+                _session.Delete(uniqueUserNameConstraint.Id);
+                _session.Delete(uniqueEmailAddressConstraint.Id);
+                _session.Delete(user);
 
-            await SaveChanges(cancellationToken: cancellationToken);
+                await SaveChanges(cancellationToken: cancellationToken);
+            }
+            catch (ConcurrencyException)
+            {
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+            }
 
             return IdentityResult.Success;
         }
@@ -1436,9 +1439,16 @@ namespace RavenDB.AspNetCore.IdentityCore
             if (user == null)
                 throw new ArgumentNullException(nameof(user));
 
-            user.ConcurrencyStamp = Guid.NewGuid().ToString();
+            try
+            {
+                user.ConcurrencyStamp = Guid.NewGuid().ToString();
 
-            await SaveChanges(cancellationToken: cancellationToken);
+                await SaveChanges(cancellationToken: cancellationToken);
+            }
+            catch (ConcurrencyException)
+            {
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+            }
 
             return IdentityResult.Success;
         }

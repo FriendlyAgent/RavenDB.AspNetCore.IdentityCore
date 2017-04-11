@@ -1,10 +1,10 @@
 # RavenDB.AspNetCore.IdentityCore
 Identity Core package for using RavenDB with ASP.NET Core Identity.
 
-[![Docker Stars](https://img.shields.io/nuget/v/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
-[![Docker Pulls](https://img.shields.io/nuget/vpre/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
+[![Nuget Version](https://img.shields.io/nuget/v/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
+[![Nuget Version Pre](https://img.shields.io/nuget/vpre/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
 
-This package is used as a replacement for the EntityFrameworkCore package and make it possible to use RavenDB as your database for storing users and roles, while being fully compatible with the Identity framework.
+This package is used as a replacement for the EntityFrameworkCore package and makes it possible to use RavenDB as your database for storing users and roles, while being fully compatible with the Identity framework.
 
 ## Getting Started:
 Install the [RavenDB.AspNetCore.IdentityCore](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/) library through [NuGet](https://nuget.org).
@@ -23,7 +23,19 @@ Add this to your Startup.cs:
 public IServiceProvider ConfigureServices(IServiceCollection services)
 {
 ...
-	
+
+	var store = new DocumentStore
+	{
+      Url = "{server url}",
+      DefaultDatabase = "Main"
+	}.Initialize();
+
+	// Ravendb framework setup.
+	services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
+	{
+      return store.OpenAsyncSession();
+	});
+
     services.AddRavenIdentity<IdentityUser, IdentityRole>()
       .AddRavenStores();
     
@@ -31,7 +43,7 @@ public IServiceProvider ConfigureServices(IServiceCollection services)
 }
 ```
 
-Optional if you want to make your own user:
+Optional if you want to implement your own user/role model:
 >**Note:** Don't forget to change IdentityUser to ApplicationUser in the Startup.cs.
 ```csharp
 public class ApplicationUser
