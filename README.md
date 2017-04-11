@@ -26,14 +26,14 @@ public IServiceProvider ConfigureServices(IServiceCollection services)
 
 	var store = new DocumentStore
 	{
-      Url = "{server url}",
-      DefaultDatabase = "Main"
+            Url = "{server url}",
+            DefaultDatabase = "Main"
 	}.Initialize();
 
 	// Ravendb framework setup.
 	services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
 	{
-      return store.OpenAsyncSession();
+            return store.OpenAsyncSession();
 	});
 
     services.AddRavenIdentity<IdentityUser, IdentityRole>()

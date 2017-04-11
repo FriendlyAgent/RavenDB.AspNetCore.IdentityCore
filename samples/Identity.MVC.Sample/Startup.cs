@@ -7,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Raven.Client.Documents;
 using Raven.Client.Documents.Session;
-using RavenDB.AspNetCore.Identity.Extensions;
 using RavenDB.AspNetCore.IdentityCore.Entities;
 using RavenDB.AspNetCore.IdentityCore.Extensions;
 
