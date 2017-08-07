@@ -25,7 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="1.1.1" />
-    <PackageReference Include="Raven.Client" Version="4.0.0-alpha-40012" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="1.1.2" />
+    <PackageReference Include="RavenDB.Client" Version="4.0.0-beta-40016" />
   </ItemGroup>
 </Project>

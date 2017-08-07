@@ -39,8 +39,11 @@ namespace Identity.MVC.Sample
             // Add framework services.
             var store = new DocumentStore
             {
-                Url = "{server url}",
-                DefaultDatabase = "Main"
+                Urls = new[]
+                {
+                    "{server url}"
+                },
+                Database = "Main"
             }.Initialize();
 
             // Ravendb framework setup.

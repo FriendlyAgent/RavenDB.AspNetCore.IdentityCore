@@ -1484,7 +1484,7 @@ namespace RavenDB.AspNetCore.IdentityCore
             if (disposing)
             {
                 if (_session != null)
-                    _session.Dispose();
+                    _session = default(TSession);
 
                 _disposed = true;
             }

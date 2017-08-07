@@ -100,7 +100,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
                             identityRoleType.GenericTypeArguments[0]),
                         new object[] {
                         session,
-                        identityErrorDescriber
+                        identityErrorDescriber,
+                        null
                     });
                 });
 
