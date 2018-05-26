@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,20 +75,39 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             IServiceCollection services,
             Action<IdentityOptions> setupAction)
              where TUser : IdentityUser
-            where TRole : IdentityRole
+             where TRole : IdentityRole
         {
-            // Services used by identity
             services.AddAuthentication(options =>
             {
-                // This is the Default value for ExternalCookieAuthenticationScheme
-                options.SignInScheme = new IdentityCookieOptions().ExternalCookieAuthenticationScheme;
+                options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddCookie(IdentityConstants.ApplicationScheme, o =>
+             {
+                 o.LoginPath = new PathString("/Account/Login");
+                 o.Events = new CookieAuthenticationEvents
+                 {
+                     OnValidatePrincipal = SecurityStampValidator.ValidatePrincipalAsync
+                 };
+             })
+            .AddCookie(IdentityConstants.ExternalScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.ExternalScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            })
+            .AddCookie(IdentityConstants.TwoFactorRememberMeScheme,
+                o => o.Cookie.Name = IdentityConstants.TwoFactorRememberMeScheme)
+            .AddCookie(IdentityConstants.TwoFactorUserIdScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.TwoFactorUserIdScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
             });
 
             // Hosting doesn't add IHttpContextAccessor by default
             services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 
             // Identity services
-            services.TryAddSingleton<IdentityMarkerService>();
             services.TryAddScoped<IUserValidator<TUser>, RavenUserValidator<TUser>>();
             services.TryAddScoped<IPasswordValidator<TUser>, PasswordValidator<TUser>>();
             services.TryAddScoped<IPasswordHasher<TUser>, PasswordHasher<TUser>>();

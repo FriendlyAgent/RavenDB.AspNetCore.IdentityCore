@@ -1,4 +1,4 @@
-﻿using RavenDB.AspNetCore.IdentityCore.Occurences;
+﻿using System;
 
 namespace RavenDB.AspNetCore.IdentityCore.Entities
 {
@@ -8,16 +8,9 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
     public abstract class IdentityUserContact
     {
         /// <summary>
-        /// Initializes a new instance of <see cref="IdentityUserContact"/>.
-        /// </summary>
-        public IdentityUserContact()
-        {
-        }
-
-        /// <summary>
         /// The record proving the user information is verified.
         /// </summary>
-        public ConfirmationOccurrence ConfirmationRecord { get; set; }
+        public DateTime? ConfirmationOn { get;  set; }
 
         /// <summary>
         /// Gets  a flag indicating if a user has confirmed their contact info.
@@ -25,7 +18,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <value>True if the email address has been confirmed, otherwise false.</value>
         public bool IsConfirmed()
         {
-            return ConfirmationRecord != null;
+            return ConfirmationOn != null;
         }
 
         /// <summary>
@@ -34,18 +27,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <value>True if the email address has been confirmed, otherwise false.</value>
         public void SetConfirmed()
         {
-            SetConfirmed(new ConfirmationOccurrence());
-        }
-
-        /// <summary>
-        /// Sets a flag indicating if a user has confirmed their contact info.
-        /// </summary>
-        /// <param name="confirmationRecord">Contains the date and time when the conformation has occurred.</param>
-        public void SetConfirmed(
-            ConfirmationOccurrence confirmationRecord)
-        {
-            if (ConfirmationRecord == null)
-                ConfirmationRecord = confirmationRecord;
+            ConfirmationOn = DateTime.UtcNow;
         }
 
         /// <summary>
@@ -53,7 +35,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// </summary>
         public void SetUnconfirmed()
         {
-            ConfirmationRecord = null;
+            ConfirmationOn = null;
         }
     }
 }

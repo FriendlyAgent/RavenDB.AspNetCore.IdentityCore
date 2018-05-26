@@ -11,13 +11,6 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         IEquatable<UserLoginInfo>
     {
         /// <summary>
-        /// Initializes a new instance of <see cref="IdentityUserLogin"/>.
-        /// </summary>
-        public IdentityUserLogin()
-        {
-        }
-
-        /// <summary>
         /// Gets or sets the login provider for the login (e.g. facebook, google).
         /// </summary>
         public virtual string LoginProvider { get; set; }

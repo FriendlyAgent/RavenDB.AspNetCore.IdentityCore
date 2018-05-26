@@ -1,5 +1,4 @@
-﻿using RavenDB.AspNetCore.IdentityCore.Occurences;
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace RavenDB.AspNetCore.IdentityCore.Entities
@@ -54,13 +53,16 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
     /// <typeparam name="TUserLogin">The type representing a user external login.</typeparam>
     /// <typeparam name="TUserToken">The type representing a user external login.</typeparam>
     public class IdentityUser<TUserClaim, TUserLogin, TUserToken>
-    {
+        where TUserClaim : IdentityUserClaim, new()
+        where TUserLogin : IdentityUserLogin, new()
+        where TUserToken : IdentityUserToken, new()
+    { 
         /// <summary>
         /// Initializes a new instance of <see cref="IdentityUser"/>.
         /// </summary>
         public IdentityUser()
         {
-            CreatedOn = new CreationOccurrence();
+            CreatedOn = DateTime.UtcNow;
             ConcurrencyStamp = Guid.NewGuid().ToString();
             Roles = new List<string>();
             Claims = new List<TUserClaim>();
@@ -90,7 +92,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
             : this(userName)
         {
             if (email != null)
-                EmailAddress = new IdentityUserEmailAddress(email);
+                Email = new IdentityUserEmail(email);
         }
 
         /// <summary>
@@ -134,7 +136,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <summary>
         /// Gets or sets the moment a user got created.
         /// </summary>
-        public virtual CreationOccurrence CreatedOn { get; private set; }
+        public virtual DateTime? CreatedOn { get; private set; }
 
         /// <summary>
         /// Gets or sets the date and time, in UTC, when any user lockout ends.
@@ -142,17 +144,43 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <remarks>
         /// A value in the past means the user is not locked out.
         /// </remarks>
-        public virtual FutureOccurrence LockoutEndDate { get; set; }
+        public virtual DateTime? LockoutEndDate { get; set; }
 
         /// <summary>
         /// Gets or sets the email address for this user.
         /// </summary>
-        public virtual IdentityUserEmailAddress EmailAddress { get; set; }
+        public virtual IdentityUserEmail Email { get; set; }
+
+        public string GetEmail()
+        {
+            return Email?.Email;
+        }
+
+        public bool IsEmailConfirmed()
+        {
+            if (Email == null)
+                return false;
+
+            return Email.IsConfirmed();
+        }
 
         /// <summary>
         /// Gets or sets a telephone number for the user.
         /// </summary>
         public virtual IdentityUserPhoneNumber PhoneNumber { get; set; }
+
+        public string GetPhoneNumber()
+        {
+            return PhoneNumber?.Number;
+        }
+
+        public bool IsPhoneNumberConfirmed()
+        {
+            if (PhoneNumber == null)
+                return false;
+
+            return PhoneNumber.IsConfirmed();
+        }
 
         /// <summary>
         /// A random value that must change whenever a users credentials change (password changed, login removed)

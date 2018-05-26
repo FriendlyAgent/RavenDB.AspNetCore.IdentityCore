@@ -1,15 +1,16 @@
 ﻿using Microsoft.AspNetCore.Identity;
-using Raven.Client.Documents.Session;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Security.Claims;
-using System.Linq;
 using Raven.Client.Documents;
+using Raven.Client.Documents.Session;
 using Raven.Client.Exceptions;
+using Raven.Client.Exceptions.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
 using RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RavenDB.AspNetCore.IdentityCore
 {
@@ -118,10 +119,9 @@ namespace RavenDB.AspNetCore.IdentityCore
             if (session == null)
                 throw new ArgumentNullException(nameof(session));
 
+            _session = session;
 
             ErrorDescriber = describer ?? new IdentityErrorDescriber();
-
-            _session = session;
         }
 
         /// <summary>
@@ -204,17 +204,33 @@ namespace RavenDB.AspNetCore.IdentityCore
                 _session.Advanced.UseOptimisticConcurrency = true;
 
                 await _session
-                    .StoreAsync(role, cancellationToken)
-                    .ConfigureAwait(false);
-
-                uniqueRoleNameConstraint.RelationId = role.Id;
-                await _session
                     .StoreAsync(uniqueRoleNameConstraint, cancellationToken)
                     .ConfigureAwait(false);
 
                 await SaveChanges(cancellationToken: cancellationToken);
+
+                await _session
+                    .StoreAsync(role, cancellationToken)
+                    .ConfigureAwait(false);
+
+                uniqueRoleNameConstraint.RelationId = role.Id;
+
+                await SaveChanges(cancellationToken: cancellationToken);
             }
             catch (ConcurrencyException ex)
+            {
+                _session.Advanced.Evict(uniqueRoleNameConstraint);
+                _session.Advanced.Evict(role);
+
+                if (ex.Message.Contains(uniqueRoleNameConstraint.Id)) // RoleName error
+                {
+                    return IdentityResult
+                        .Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
+                }
+
+                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+            }
+            catch (NonUniqueObjectException ex)
             {
                 _session.Advanced.Evict(uniqueRoleNameConstraint);
                 _session.Advanced.Evict(role);
@@ -226,7 +242,7 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
                 }
 
-                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                throw;
             }
             finally
             {
@@ -399,11 +415,7 @@ namespace RavenDB.AspNetCore.IdentityCore
             ThrowIfDisposed();
             if (role == null)
                 throw new ArgumentNullException(nameof(role));
-
-            if (normalizedName == null)
-                throw new ArgumentNullException(nameof(normalizedName));
-
-            role.NormalizedRoleName = normalizedName;
+            role.NormalizedRoleName = normalizedName ?? throw new ArgumentNullException(nameof(normalizedName));
 
             return Task.FromResult(0);
         }

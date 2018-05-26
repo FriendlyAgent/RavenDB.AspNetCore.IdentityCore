@@ -10,14 +10,6 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         : IEquatable<IdentityUserClaim>,
         IEquatable<Claim>
     {
-
-        /// <summary>
-        /// Initializes a new instance of <see cref="IdentityUserClaim"/>.
-        /// </summary>
-        public IdentityUserClaim()
-        {
-        }
-
         /// <summary>
         /// Gets or sets the claim type for this claim.
         /// </summary>

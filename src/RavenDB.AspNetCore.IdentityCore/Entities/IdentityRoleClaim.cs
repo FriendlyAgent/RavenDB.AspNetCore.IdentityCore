@@ -11,13 +11,6 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         IEquatable<Claim>
     {
         /// <summary>
-        /// Initializes a new instance of <see cref="IdentityRoleClaim"/>.
-        /// </summary>
-        public IdentityRoleClaim()
-        {
-        }
-
-        /// <summary>
         /// Gets or sets the claim type for this claim.
         /// </summary>
         public virtual string ClaimType { get; set; }
