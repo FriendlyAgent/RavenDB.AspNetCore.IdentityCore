@@ -55,7 +55,6 @@ namespace RavenDB.AspNetCore.IdentityCore
     /// Represents a new instance of a persistence store for the specified user and role types.
     /// </summary>
     /// <typeparam name="TUser">The type representing a user.</typeparam>
-    /// <typeparam name="TRole">The type representing a role.</typeparam>
     /// <typeparam name="TSession">The type of the data context class used to access the session.</typeparam>
     public class UserOnlyStore<TUser, TSession>
         : UserOnlyStore<TUser, TSession, IdentityUserClaim, IdentityUserLogin, IdentityUserToken>

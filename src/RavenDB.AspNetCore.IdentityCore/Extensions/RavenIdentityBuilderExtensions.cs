@@ -121,7 +121,38 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             }
             else
             {
-                throw new NotImplementedException();
+                var genericUserType = typeof(UserOnlyStore<,,,,>).MakeGenericType(
+                    userType,
+                    typeof(TSession),
+                    identityUserType.GenericTypeArguments[0],
+                    identityUserType.GenericTypeArguments[1],
+                    identityUserType.GenericTypeArguments[2]);
+
+                if (getSession != null)
+                {
+                    services.TryAddScoped(
+                    typeof(IUserStore<>).MakeGenericType(userType),
+                    provider =>
+                    {
+                        var identityErrorDescriber = provider.GetService<IdentityErrorDescriber>();
+                        var option = provider.GetService<IOptions<IdentityOptions>>();
+                        var session = getSession(provider);
+
+                        return Activator.CreateInstance(
+                            genericUserType,
+                            new object[] {
+                                    session,
+                                    identityErrorDescriber,
+                                    option
+                            });
+                    });
+                }
+                else
+                {
+                    services.TryAddScoped(
+                       typeof(IUserStore<>).MakeGenericType(userType),
+                      genericUserType);
+                }
             }
         }
 
