@@ -1,5 +1,4 @@
-﻿using RavenDB.AspNetCore.IdentityCore.Occurences;
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace RavenDB.AspNetCore.IdentityCore.Entities
@@ -40,7 +39,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// </summary>
         public IdentityRole()
         {
-            CreatedOn = new CreationOccurrence();
+            CreatedOn = DateTime.UtcNow;
             ConcurrencyStamp = Guid.NewGuid().ToString();
             Claims = new List<TRoleClaim>();
         }
@@ -63,7 +62,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <summary>
         /// Gets or sets the moment a role got created.
         /// </summary>
-        public virtual CreationOccurrence CreatedOn { get; private set; }
+        public virtual DateTime? CreatedOn { get; private set; }
 
         /// <summary>
         /// Navigation property for claims in this role.

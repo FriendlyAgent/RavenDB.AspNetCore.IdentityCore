@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using Identity.MVC.Sample.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
 
 namespace Identity.MVC.Sample.Controllers
 {
@@ -29,7 +27,7 @@ namespace Identity.MVC.Sample.Controllers
 
         public IActionResult Error()
         {
-            return View();
+            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
     }
 }

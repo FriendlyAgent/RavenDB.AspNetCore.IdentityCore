@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RavenDB.Client" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RavenDB.AspNetCore.IdentityCore\RavenDB.AspNetCore.IdentityCore.csproj" />
+    <ProjectReference Include="..\RavenDB.Test.Shared\RavenDB.Test.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

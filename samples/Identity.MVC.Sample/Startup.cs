@@ -2,77 +2,59 @@
 using Identity.MVC.Sample.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Raven.Client.Documents;
 using Raven.Client.Documents.Session;
-using RavenDB.AspNetCore.IdentityCore.Entities;
 using RavenDB.AspNetCore.IdentityCore.Extensions;
 
 namespace Identity.MVC.Sample
 {
     public class Startup
     {
-        public Startup(IHostingEnvironment env)
+        public Startup(IConfiguration configuration)
         {
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(env.ContentRootPath)
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true);
-
-            if (env.IsDevelopment())
-            {
-                // For more details on using the user secret store see https://go.microsoft.com/fwlink/?LinkID=532709
-                builder.AddUserSecrets<Startup>();
-            }
-
-            builder.AddEnvironmentVariables();
-            Configuration = builder.Build();
+            Configuration = configuration;
         }
 
-        public IConfigurationRoot Configuration { get; }
+        public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            // Add framework services.
             var store = new DocumentStore
             {
                 Urls = new[]
-                {
-                    "{server url}"
-                },
-                Database = "Main"
+                  {
+                        "http://localhost:8081"
+                    },
+                Database = "ravendb-Identity"
             }.Initialize();
 
-            // Ravendb framework setup.
             services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
             {
                 return store.OpenAsyncSession();
             });
 
-            services.AddRavenIdentity<ApplicationUser, IdentityRole>()
+            services.AddRavenIdentity<ApplicationUser>()
                 .AddRavenStores()
                 .AddDefaultTokenProviders();
 
-            services.AddMvc();
-
             // Add application services.
-            services.AddTransient<IEmailSender, AuthMessageSender>();
-            services.AddTransient<ISmsSender, AuthMessageSender>();
+            services.AddTransient<IEmailSender, EmailSender>();
+
+            services.AddMvc();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
-            loggerFactory.AddConsole(Configuration.GetSection("Logging"));
-            loggerFactory.AddDebug();
-
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
                 app.UseBrowserLink();
+                app.UseDatabaseErrorPage();
             }
             else
             {
@@ -81,9 +63,7 @@ namespace Identity.MVC.Sample
 
             app.UseStaticFiles();
 
-            app.UseIdentity();
-
-            // Add external authentication middleware below. To configure them please see https://go.microsoft.com/fwlink/?LinkID=532715
+            app.UseAuthentication();
 
             app.UseMvc(routes =>
             {

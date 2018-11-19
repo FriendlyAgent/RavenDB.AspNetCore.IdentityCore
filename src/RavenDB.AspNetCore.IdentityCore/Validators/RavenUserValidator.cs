@@ -44,7 +44,10 @@ namespace RavenDB.AspNetCore.IdentityCore.Validators
             var errors = new List<IdentityError>();
 
             await ValidateUserName(manager, user, errors);
-            await ValidateEmail(manager, user, errors);
+            if (manager.Options.User.RequireUniqueEmail)
+            {
+                await ValidateEmail(manager, user, errors);
+            }
 
             return errors.Count > 0 ? IdentityResult.Failed(errors.ToArray()) : IdentityResult.Success;
         }

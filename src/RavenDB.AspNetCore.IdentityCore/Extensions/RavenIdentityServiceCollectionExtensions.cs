@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +22,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
         public static IdentityBuilder AddRavenIdentity(
             this IServiceCollection services)
         {
-            return services.AddRavenIdentity<IdentityUser, IdentityRole>(null);
+            return services.AddRavenIdentity<IdentityUser>(null);
         }
 
         /// <summary>
@@ -35,7 +35,17 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             this IServiceCollection services)
             where TUser : IdentityUser
         {
-            return services.AddRavenIdentity<TUser, IdentityRole>(null);
+            return services.AddRavenIdentity<TUser>(null);
+        }
+
+
+        public static IdentityBuilder AddRavenIdentity<TUser>(
+            this IServiceCollection services,
+            Action<IdentityOptions> setupAction)
+            where TUser : IdentityUser
+        {
+            AddIdentity<TUser>(services, setupAction);
+            return new IdentityBuilder(typeof(TUser), services);
         }
 
         /// <summary>
@@ -75,20 +85,39 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             IServiceCollection services,
             Action<IdentityOptions> setupAction)
              where TUser : IdentityUser
-            where TRole : IdentityRole
+             where TRole : IdentityRole
         {
-            // Services used by identity
             services.AddAuthentication(options =>
             {
-                // This is the Default value for ExternalCookieAuthenticationScheme
-                options.SignInScheme = new IdentityCookieOptions().ExternalCookieAuthenticationScheme;
+                options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddCookie(IdentityConstants.ApplicationScheme, o =>
+             {
+                 o.LoginPath = new PathString("/Account/Login");
+                 o.Events = new CookieAuthenticationEvents
+                 {
+                     OnValidatePrincipal = SecurityStampValidator.ValidatePrincipalAsync
+                 };
+             })
+            .AddCookie(IdentityConstants.ExternalScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.ExternalScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            })
+            .AddCookie(IdentityConstants.TwoFactorRememberMeScheme,
+                o => o.Cookie.Name = IdentityConstants.TwoFactorRememberMeScheme)
+            .AddCookie(IdentityConstants.TwoFactorUserIdScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.TwoFactorUserIdScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
             });
 
             // Hosting doesn't add IHttpContextAccessor by default
             services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 
             // Identity services
-            services.TryAddSingleton<IdentityMarkerService>();
             services.TryAddScoped<IUserValidator<TUser>, RavenUserValidator<TUser>>();
             services.TryAddScoped<IPasswordValidator<TUser>, PasswordValidator<TUser>>();
             services.TryAddScoped<IPasswordHasher<TUser>, PasswordHasher<TUser>>();
@@ -102,6 +131,71 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             services.TryAddScoped<UserManager<TUser>, UserManager<TUser>>();
             services.TryAddScoped<SignInManager<TUser>, SignInManager<TUser>>();
             services.TryAddScoped<RoleManager<TRole>, RoleManager<TRole>>();
+
+            var dataProtectionProviderType = typeof(DataProtectorTokenProvider<>)
+                .MakeGenericType(typeof(TUser));
+
+            var phoneNumberProviderType = typeof(PhoneNumberTokenProvider<>)
+                .MakeGenericType(typeof(TUser));
+
+            var emailTokenProviderType = typeof(EmailTokenProvider<>)
+                .MakeGenericType(typeof(TUser));
+
+            AddTokenProvider(services, TokenOptions.DefaultProvider, dataProtectionProviderType);
+            AddTokenProvider(services, TokenOptions.DefaultEmailProvider, emailTokenProviderType);
+            AddTokenProvider(services, TokenOptions.DefaultPhoneProvider, phoneNumberProviderType);
+
+            if (setupAction != null)
+                services.Configure(setupAction);
+        }
+
+        private static void AddIdentity<TUser>(
+         IServiceCollection services,
+         Action<IdentityOptions> setupAction)
+          where TUser : IdentityUser
+        {
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddCookie(IdentityConstants.ApplicationScheme, o =>
+            {
+                o.LoginPath = new PathString("/Account/Login");
+                o.Events = new CookieAuthenticationEvents
+                {
+                    OnValidatePrincipal = SecurityStampValidator.ValidatePrincipalAsync
+                };
+            })
+            .AddCookie(IdentityConstants.ExternalScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.ExternalScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            })
+            .AddCookie(IdentityConstants.TwoFactorRememberMeScheme,
+                o => o.Cookie.Name = IdentityConstants.TwoFactorRememberMeScheme)
+            .AddCookie(IdentityConstants.TwoFactorUserIdScheme, o =>
+            {
+                o.Cookie.Name = IdentityConstants.TwoFactorUserIdScheme;
+                o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            });
+
+            // Hosting doesn't add IHttpContextAccessor by default
+            services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+
+            // Identity services
+            services.TryAddScoped<IUserValidator<TUser>, RavenUserValidator<TUser>>();
+            services.TryAddScoped<IPasswordValidator<TUser>, PasswordValidator<TUser>>();
+            services.TryAddScoped<IPasswordHasher<TUser>, PasswordHasher<TUser>>();
+            services.TryAddScoped<ILookupNormalizer, UpperInvariantLookupNormalizer>();
+
+            // No interface for the error describer so we can add errors without rev'ing the interface
+            services.TryAddScoped<IdentityErrorDescriber>();
+            services.TryAddScoped<ISecurityStampValidator, SecurityStampValidator<TUser>>();
+            services.TryAddScoped<IUserClaimsPrincipalFactory<TUser>, UserClaimsPrincipalFactory<TUser>>();
+            services.TryAddScoped<UserManager<TUser>, UserManager<TUser>>();
+            services.TryAddScoped<SignInManager<TUser>, SignInManager<TUser>>();
 
             var dataProtectionProviderType = typeof(DataProtectorTokenProvider<>)
                 .MakeGenericType(typeof(TUser));

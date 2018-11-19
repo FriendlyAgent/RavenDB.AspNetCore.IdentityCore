@@ -25,10 +25,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
             string phoneNumber)
            : this()
         {
-            if (phoneNumber == null)
-                throw new ArgumentNullException(nameof(phoneNumber));
-
-            Number = phoneNumber;
+            Number = phoneNumber ?? throw new ArgumentNullException(nameof(phoneNumber));
         }
 
         /// <summary>
