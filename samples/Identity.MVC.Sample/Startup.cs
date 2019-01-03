@@ -6,8 +6,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Raven.Client.Documents;
-using Raven.Client.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Extensions;
+using System;
 
 namespace Identity.MVC.Sample
 {
@@ -27,18 +27,22 @@ namespace Identity.MVC.Sample
             {
                 Urls = new[]
                   {
-                        "http://localhost:8081"
+                        "http://localhost:8080"
                     },
                 Database = "ravendb-Identity"
             }.Initialize();
 
-            services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
-            {
-                return store.OpenAsyncSession();
-            });
+            //services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
+            //{
+            //    return store.OpenAsyncSession();
+            //});
 
             services.AddRavenIdentity<ApplicationUser>()
-                .AddRavenStores()
+                .AddRavenStores(delegate (
+                    IServiceProvider provider)
+                {
+                    return store.OpenAsyncSession();
+                })
                 .AddDefaultTokenProviders();
 
             // Add application services.
