@@ -43,12 +43,16 @@ namespace RavenDB.Identity.MVC.Sample
             }.Initialize();
 
             services
-                .AddIdentity<ApplicationUser, RavenIdentityRole>()
+                .AddRavenIdentity<ApplicationUser, RavenIdentityRole>(
+                    options =>
+                    {
+                        options.User.RequireUniqueEmail = true;
+                    })
                 .AddRavenStores(delegate (
                     IServiceProvider provider)
-                {
-                    return store.OpenAsyncSession();
-                })
+                    {
+                        return store.OpenAsyncSession();
+                    })
                 .AddDefaultUI(UIFramework.Bootstrap4)
                 .AddDefaultTokenProviders();
 

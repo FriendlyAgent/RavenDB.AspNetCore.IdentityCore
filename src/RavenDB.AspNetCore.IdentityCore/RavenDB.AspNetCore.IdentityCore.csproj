@@ -1,22 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;netcoreapp2.0;netcoreapp3.0</TargetFrameworks>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Description>Replacement package for Identity Core so you can use RavenDB with ASP.NET Identity.</Description>
-    <Copyright>Copyright 2017</Copyright>
+    <Copyright>Copyright 2020</Copyright>
+    <Title>RavenDB AspNetCore IdentityCore</Title>
     <AssemblyTitle>RavenDB AspNetCore IdentityCore</AssemblyTitle>
     <Authors>FriendlyAgent</Authors>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
-	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>RavenDB.AspNetCore.IdentityCore</AssemblyName>
     <PackageId>RavenDB.AspNetCore.IdentityCore</PackageId>
     <PackageTags>nosql;ravendb;raven;document;database;client;identitycore;ASP.NET;Identity;core</PackageTags>
-    <PackageIconUrl>http://static.ravendb.net/logo-for-nuget.png</PackageIconUrl>
+    <PackageLicenseUrl></PackageLicenseUrl>
+    <PackageIcon>logo-for-nuget.png</PackageIcon>
     <PackageProjectUrl>https://github.com/FriendlyAgent/RavenDB.AspNetCore.IdentityCore</PackageProjectUrl>
-    <PackageLicenseUrl>https://github.com/FriendlyAgent/RavenDB.AspNetCore.IdentityCore/blob/master/LICENSE</PackageLicenseUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/FriendlyAgent/RavenDB.AspNetCore.IdentityCore</RepositoryUrl>
-    <NetStandardImplicitPackageVersion>1.6.1</NetStandardImplicitPackageVersion>
-    <PackageTargetFallback>$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
@@ -24,8 +23,32 @@
     <Version>1.1.0-rc</Version>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;netcoreapp2.0;netcoreapp3.0</TargetFrameworks>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>NETSTANDARD_2_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp2.0'">
+    <DefineConstants>NETCOREAPP_2_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+    <DefineConstants>NETCOREAPP_3_0</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
-    <PackageReference Include="RavenDB.Client" Version="4.2.101" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp2.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RavenDB.Client" Version="4.2.4" />
   </ItemGroup>
 </Project>

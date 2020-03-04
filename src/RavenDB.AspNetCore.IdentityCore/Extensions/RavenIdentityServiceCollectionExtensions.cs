@@ -118,6 +118,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
 
             // Identity services
             services.TryAddScoped<IUserValidator<TUser>, RavenUserValidator<TUser>>();
+
+#if NETCOREAPP_3_0
+            services.TryAddScoped<IUserConfirmation<TUser>, DefaultUserConfirmation<TUser>>();
+#endif
+
             services.TryAddScoped<IPasswordValidator<TUser>, PasswordValidator<TUser>>();
             services.TryAddScoped<IPasswordHasher<TUser>, PasswordHasher<TUser>>();
             services.TryAddScoped<ILookupNormalizer, UpperInvariantLookupNormalizer>();

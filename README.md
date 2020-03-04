@@ -4,7 +4,7 @@ Identity Core package for using RavenDB with ASP.NET Core Identity.
 [![Nuget Version](https://img.shields.io/nuget/v/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
 [![Nuget Version Pre](https://img.shields.io/nuget/vpre/RavenDB.AspNetCore.IdentityCore.svg?style=flat)](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/)
 
-This package is used as a replacement for the EntityFrameworkCore package and makes it possible to use RavenDB as your database for storing users and roles, while being fully compatible with the Identity framework.
+This package is used as a replacement for the EntityFrameworkCore package and makes it possible to use RavenDB as your database for storing users and roles, while being fully compatible with the Identity framework. This package supports **[`.NET Standard 2.*`](https://docs.microsoft.com/en-us/dotnet/articles/standard/library),** **[`.NET CORE 2.*`](https://docs.microsoft.com/en-us/dotnet/articles/standard/library)**, and **[`.NET Core 3.*`](https://docs.microsoft.com/en-us/dotnet/articles/standard/library)**
 
 ## Getting Started:
 Install the [RavenDB.AspNetCore.IdentityCore](https://www.nuget.org/packages/RavenDB.AspNetCore.IdentityCore/) library through [NuGet](https://nuget.org).
@@ -51,7 +51,7 @@ Optional if you want to implement your own user/role model:
 >**Note:** Don't forget to change IdentityUser to ApplicationUser in the Startup.cs.
 ```csharp
 public class ApplicationUser
-        : IdentityUser
+        : RavenIdentityUser
     {
         public ApplicationUser(
             string userName, 
