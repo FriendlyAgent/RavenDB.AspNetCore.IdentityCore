@@ -15,7 +15,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
     public static class RavenIdentityBuilderExtensions
     {
         /// <summary>
-        /// Adds an ravendb implementation of identity information stores.
+        /// Adds an RavenDB implementation of identity information stores.
         /// </summary>
         /// <param name="builder">The <see cref="IdentityBuilder"/> instance this method extends.</param>
         /// <param name="getSession">The action used to get the desired session.</param>
@@ -28,7 +28,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
         }
 
         /// <summary>
-        /// Adds an ravendb implementation of identity information stores.
+        /// Adds an RavenDB implementation of identity information stores.
         /// </summary>
         /// <typeparam name="TSession">The type of the data context class used to access the session.</typeparam>
         /// <param name="builder">The <see cref="IdentityBuilder"/> instance this method extends.</param>
@@ -50,26 +50,26 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             Func<IServiceProvider, TSession> getSession = null)
             where TSession : IAsyncDocumentSession
         {
-            var identityUserType = FindGenericBaseType(userType, typeof(IdentityUser<,,>));
-            if (identityUserType == null)
+            var IdentityUserType = FindGenericBaseType(userType, typeof(RavenIdentityUser<,,>));
+            if (IdentityUserType == null)
                 throw new InvalidOperationException();
 
             if (roleType != null)
             {
-                var identityRoleType = FindGenericBaseType(roleType, typeof(IdentityRole<>));
+                var identityRoleType = FindGenericBaseType(roleType, typeof(RavenIdentityRole<>));
                 if (identityRoleType == null)
                     throw new InvalidOperationException();
 
-                var genericUserType = typeof(UserStore<,,,,,,>).MakeGenericType(
+                var genericUserType = typeof(RavenUserStore<,,,,,,>).MakeGenericType(
                     userType,
                     roleType,
                     typeof(TSession),
-                    identityUserType.GenericTypeArguments[0],
-                    identityUserType.GenericTypeArguments[1],
-                    identityUserType.GenericTypeArguments[2],
+                    IdentityUserType.GenericTypeArguments[0],
+                    IdentityUserType.GenericTypeArguments[1],
+                    IdentityUserType.GenericTypeArguments[2],
                     identityRoleType.GenericTypeArguments[0]);
 
-                var genericRoleType = typeof(RoleStore<,,>).MakeGenericType(
+                var genericRoleType = typeof(RavenRoleStore<,,>).MakeGenericType(
                     roleType,
                     typeof(TSession),
                     identityRoleType.GenericTypeArguments[0]);
@@ -84,12 +84,17 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
                         var option = provider.GetService<IOptions<IdentityOptions>>();
                         var session = getSession(provider);
 
+                        var userOptions = GetRavenIdentityUserOptions<TSession>(provider, userType);
+                        var roleOptions = GetRavenIdentityRoleOptions<TSession>(provider, roleType);
+
                         return Activator.CreateInstance(
                             genericUserType,
                             new object[] {
                                     session,
                                     identityErrorDescriber,
-                                    option
+                                    option,
+                                    userOptions,
+                                    roleOptions
                             });
                     });
 
@@ -99,12 +104,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
                     {
                         var identityErrorDescriber = provider.GetService<IdentityErrorDescriber>();
                         var session = getSession(provider);
+                        var roleOptions = GetRavenIdentityRoleOptions<TSession>(provider, roleType);
 
                         return Activator.CreateInstance(
                                 genericRoleType,
                                 new object[] {
                                     session,
-                                    identityErrorDescriber
+                                    identityErrorDescriber,
+                                    roleOptions
                                 });
                     });
                 }
@@ -121,12 +128,13 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
             }
             else
             {
-                var genericUserType = typeof(UserOnlyStore<,,,,>).MakeGenericType(
-                    userType,
-                    typeof(TSession),
-                    identityUserType.GenericTypeArguments[0],
-                    identityUserType.GenericTypeArguments[1],
-                    identityUserType.GenericTypeArguments[2]);
+                var genericUserType = typeof(RavenUserOnlyStore<,,,,>)
+                    .MakeGenericType(
+                        userType,
+                        typeof(TSession),
+                        IdentityUserType.GenericTypeArguments[0],
+                        IdentityUserType.GenericTypeArguments[1],
+                        IdentityUserType.GenericTypeArguments[2]);
 
                 if (getSession != null)
                 {
@@ -137,23 +145,55 @@ namespace RavenDB.AspNetCore.IdentityCore.Extensions
                         var identityErrorDescriber = provider.GetService<IdentityErrorDescriber>();
                         var option = provider.GetService<IOptions<IdentityOptions>>();
                         var session = getSession(provider);
+                        var userOptions = GetRavenIdentityUserOptions<TSession>(provider, userType);
 
                         return Activator.CreateInstance(
                             genericUserType,
                             new object[] {
                                     session,
                                     identityErrorDescriber,
-                                    option
+                                    option,
+                                    userOptions
                             });
                     });
                 }
                 else
                 {
                     services.TryAddScoped(
-                       typeof(IUserStore<>).MakeGenericType(userType),
-                      genericUserType);
+                        typeof(IUserStore<>).MakeGenericType(userType),
+                        genericUserType);
                 }
             }
+        }
+
+        private static object GetRavenIdentityUserOptions<TSession>(IServiceProvider provider, Type userType)
+            where TSession : IAsyncDocumentSession
+        {
+            var userOption = typeof(RavenIdentityUserOptions<,>)
+                .MakeGenericType(
+                    userType,
+                    typeof(TSession));
+
+            var optionType = typeof(IOptions<>)
+                .MakeGenericType(userOption);
+
+            return provider
+                .GetService(optionType);
+        }
+
+        private static object GetRavenIdentityRoleOptions<TSession>(IServiceProvider provider, Type roleType)
+            where TSession : IAsyncDocumentSession
+        {
+            var roleOptionType = typeof(RavenIdentityRoleOptions<,>)
+                .MakeGenericType(
+                    roleType,
+                    typeof(TSession));
+
+            var optionType = typeof(IOptions<>)
+                .MakeGenericType(roleOptionType);
+
+            return provider
+                .GetService(optionType);
         }
 
         private static TypeInfo FindGenericBaseType(Type currentType, Type genericBaseType)

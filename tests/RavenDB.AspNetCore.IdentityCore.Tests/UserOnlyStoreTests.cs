@@ -30,14 +30,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
+                    var userStore = new RavenUserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
                     var user = new TestUser()
                     {
                         UserName = username
                     };
 
                     if (email != null)
-                        user.Email = new IdentityUserEmail(email);
+                        user.Email = new RavenIdentityUserEmail(email);
 
                     var result = userStore.CreateAsync(user).Result;
                     IdentityResultAssert.IsSuccess(result);
@@ -66,7 +66,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
+                    var userStore = new RavenUserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
                     var userA = new TestUser()
                     {
                         UserName = username
@@ -105,11 +105,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
+                    var userStore = new RavenUserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
                     var userA = new TestUser()
                     {
                         UserName = usernameA,
-                        Email = new IdentityUserEmail(email)
+                        Email = new RavenIdentityUserEmail(email)
                     };
                     var resultA = userStore.CreateAsync(userA).Result;
                     IdentityResultAssert.IsSuccess(resultA);
@@ -117,7 +117,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     var userB = new TestUser()
                     {
                         UserName = usernameB,
-                        Email = new IdentityUserEmail(email)
+                        Email = new RavenIdentityUserEmail(email)
                     };
                     var resultB = userStore.CreateAsync(userB).Result;
                     IdentityResultAssert.IsFailure(resultB);
@@ -146,7 +146,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
+                    var userStore = new RavenUserOnlyStore<TestUser>(session, optionsAccessor: options.Object);
                     var user = new TestUser()
                     {
                         UserName = username

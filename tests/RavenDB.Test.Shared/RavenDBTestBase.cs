@@ -14,7 +14,7 @@ namespace RavenDB.Test.Shared
             var store = new DocumentStore()
             {
                 Database = name,
-                Urls = new[] { "http://localhost:8081" }
+                Urls = new[] { "http://localhost:8080" }
             };
 
             store.Initialize();

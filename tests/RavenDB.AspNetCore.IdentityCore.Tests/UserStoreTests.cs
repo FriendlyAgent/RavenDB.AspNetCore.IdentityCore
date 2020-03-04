@@ -11,8 +11,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
         : RavenDBTestBase
     {
         private void CreateUserWithRole(
-            UserStore<TestUser, TestRole> userStore,
-            RoleStore<TestRole> roleStore,
+            RavenUserStore<TestUser, TestRole> userStore,
+            RavenRoleStore<TestRole> roleStore,
             TestUser user,
             TestRole role)
         {
@@ -50,8 +50,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserStore<TestUser, TestRole>(session, optionsAccessor: options.Object);
-                    var roleStore = new RoleStore<TestRole>(session);
+                    var userStore = new RavenUserStore<TestUser, TestRole>(session, optionsAccessor: options.Object);
+                    var roleStore = new RavenRoleStore<TestRole>(session);
 
                     var user = new TestUser()
                     {
@@ -87,8 +87,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
                     };
                     options.Setup(a => a.Value).Returns(identityOptions);
 
-                    var userStore = new UserStore<TestUser, TestRole>(session, optionsAccessor: options.Object);
-                    var roleStore = new RoleStore<TestRole>(session);
+                    var userStore = new RavenUserStore<TestUser, TestRole>(session, optionsAccessor: options.Object);
+                    var roleStore = new RavenRoleStore<TestRole>(session);
 
                     var user = new TestUser()
                     {

@@ -12,7 +12,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Validators
     /// <typeparam name="TUser"></typeparam>
     public class RavenUserValidator<TUser>
         : UserValidator<TUser>
-        where TUser : IdentityUser
+        where TUser : RavenIdentityUser
     {
         /// <summary>
         /// Constructs a new instance of <see cref="RavenUserValidator{TUser}"/>.

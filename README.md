@@ -16,7 +16,7 @@ Install the [RavenDB.AspNetCore.IdentityCore](https://www.nuget.org/packages/Rav
     Install-Package RavenDB.AspNetCore.IdentityCore -Pre
 ```    
 
-## Usage:   
+## Quick start guide:   
 Add this to your Startup.cs:
 >**Note:** You need to have IAsyncDocumentSession injected as a service [Check Out](https://github.com/FriendlyAgent/RavenDB.AspNetCore.DependencyInjection).
 ```csharp
@@ -28,20 +28,21 @@ public IServiceProvider ConfigureServices(IServiceCollection services)
 	{
 		Urls = new[]
 		{
-			"{server url}"
-		},
-		Database = "Main"
+			   "http://localhost:8080"
+		   },
+		Database = "RavenDB-Identity"
 	}.Initialize();
 
-	// Ravendb framework setup.
-	services.AddScoped<IAsyncDocumentSession, IAsyncDocumentSession>(provider =>
-	{
-            return store.OpenAsyncSession();
-	});
-
-    services.AddRavenIdentity<IdentityUser, IdentityRole>()
-      .AddRavenStores();
-    
+	services
+		.AddIdentity<RavenIdentityUser, RavenIdentityRole>()
+		.AddRavenStores(delegate (
+			IServiceProvider provider)
+		{
+			return store.OpenAsyncSession();
+		})
+		.AddDefaultUI(UIFramework.Bootstrap4)
+		.AddDefaultTokenProviders();
+		
 ...
 }
 ```

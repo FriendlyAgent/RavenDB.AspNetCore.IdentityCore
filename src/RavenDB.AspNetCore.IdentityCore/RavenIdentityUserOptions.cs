@@ -10,30 +10,72 @@ using System.Threading.Tasks;
 
 namespace RavenDB.AspNetCore.IdentityCore
 {
-    public class RavenUserOptions<TSession, TUser>
-        where TSession : IAsyncDocumentSession
-        where TUser : IdentityUser
-
+    /// <summary>
+    /// Represents all the user options you can use to configure the Raven Identity system.
+    /// </summary>
+    public class RavenIdentityUserOptions
+        : RavenIdentityUserOptions<RavenIdentityUser>
     {
-        public Func<TSession, string, CancellationToken, Task<TUser>> GetUserByNameAsync { get; set; }
-
-        public Func<TSession, string, CancellationToken, Task<TUser>> GetUserByEmailAsync { get; set; }
-
-        public Func<TSession, string, string, CancellationToken, Task<TUser>> GetUserByLoginAsync { get; set; }
-
-        public Func<TSession, string, CancellationToken, Task<List<TUser>>> GetUsersInRoleAsync { get; set; }
-
-        public Func<TSession, Claim, CancellationToken, Task<List<TUser>>> GetUsersForClaimAsync { get; set; }
     }
 
+    /// <summary>
+    /// Represents all the user options you can use to configure the Raven Identity system.
+    /// </summary>
+    /// <typeparam name="TUser">The type representing a user.</typeparam>
     public class RavenIdentityUserOptions<TUser>
-        where TUser : IdentityUser
+        : RavenIdentityUserOptions<TUser, IAsyncDocumentSession>
+        where TUser : RavenIdentityUser
     {
-        public RavenUserOptions<IAsyncDocumentSession, TUser> RavenUserOptions { get; set; }
-            = new RavenUserOptions<IAsyncDocumentSession, TUser>()
+    }
+
+    /// <summary>
+    /// Represents all the user options you can use to configure the ravem identity system.
+    /// </summary>
+    /// <typeparam name="TUser">The type representing a user.</typeparam>
+    /// <typeparam name="TSession">The type of the data context class used to access the session.</typeparam>
+    public class RavenIdentityUserOptions<TUser, TSession>
+        where TUser : RavenIdentityUser
+        where TSession : IAsyncDocumentSession
+    {
+        /// <summary>
+        /// Specifies options for query the database.
+        /// </summary>
+        public class QueryOptions
+        {
+            /// <summary>
+            /// The query used for getting the user by name.
+            /// </summary>
+            public Func<TSession, string, CancellationToken, Task<TUser>> GetUserByNameAsync { get; set; }
+
+            /// <summary>
+            /// The query used for getting the user by email.
+            /// </summary>
+            public Func<TSession, string, CancellationToken, Task<TUser>> GetUserByEmailAsync { get; set; }
+
+            /// <summary>
+            /// The query used for getting the user by login.
+            /// </summary>
+            public Func<TSession, string, string, CancellationToken, Task<TUser>> GetUserByLoginAsync { get; set; }
+
+            /// <summary>
+            /// The query used for getting the users in a role.
+            /// </summary>
+            public Func<TSession, string, CancellationToken, Task<List<TUser>>> GetUsersInRoleAsync { get; set; }
+
+            /// <summary>
+            /// The query used for getting the user for claim.
+            /// </summary>
+            public Func<TSession, Claim, CancellationToken, Task<List<TUser>>> GetUsersForClaimAsync { get; set; }
+        }
+
+        /// <summary>
+        /// Gets or sets the Query for the identity system.
+        /// </summary>
+        public QueryOptions Query { get; set; }
+            = new QueryOptions()
             {
                 GetUserByNameAsync = delegate (
-                    IAsyncDocumentSession session,
+                    TSession session,
                     string normalizedUserName,
                     CancellationToken cancellationToken)
                 {
@@ -43,7 +85,7 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .FirstOrDefaultAsync(cancellationToken);
                 },
                 GetUserByEmailAsync = delegate (
-                    IAsyncDocumentSession session,
+                    TSession session,
                     string normalizedEmail,
                     CancellationToken cancellationToken)
                 {
@@ -53,7 +95,7 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .FirstOrDefaultAsync(cancellationToken);
                 },
                 GetUsersForClaimAsync = delegate (
-                    IAsyncDocumentSession session,
+                    TSession session,
                     Claim claim,
                     CancellationToken cancellationToken)
                 {
@@ -61,10 +103,10 @@ namespace RavenDB.AspNetCore.IdentityCore
                         .Query<TUser>()
                         .Where(a => a.Claims.Any(
                             b => b.ClaimType == claim.Type && b.ClaimValue == claim.Value))
-                        .ToListAsync();
+                        .ToListAsync(cancellationToken);
                 },
                 GetUserByLoginAsync = delegate (
-                    IAsyncDocumentSession session,
+                    TSession session,
                     string loginProvider,
                     string providerKey,
                     CancellationToken cancellationToken)
@@ -76,14 +118,14 @@ namespace RavenDB.AspNetCore.IdentityCore
                                 b => b.LoginProvider == loginProvider && b.ProviderKey == loginProvider), cancellationToken);
                 },
                 GetUsersInRoleAsync = delegate (
-                    IAsyncDocumentSession session,
+                    TSession session,
                     string roleId,
                     CancellationToken cancellationToken)
                 {
                     return session
                         .Query<TUser>()
                         .Where(a => a.Roles.Contains(roleId))
-                        .ToListAsync();
+                        .ToListAsync(cancellationToken);
                 }
             };
     }

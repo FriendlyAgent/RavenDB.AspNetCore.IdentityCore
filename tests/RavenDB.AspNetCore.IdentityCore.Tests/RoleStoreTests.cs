@@ -14,7 +14,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
             {
                 using (var session = store.OpenAsyncSession())
                 {
-                    var roleStore = new RoleStore<TestRole>(session);
+                    var roleStore = new RavenRoleStore<TestRole>(session);
                     var role = new TestRole()
                     {
                         RoleName = roleName
@@ -37,7 +37,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Tests
             {
                 using (var session = store.OpenAsyncSession())
                 {
-                    var roleStore = new RoleStore<TestRole>(session);
+                    var roleStore = new RavenRoleStore<TestRole>(session);
                     var roleA = new TestRole()
                     {
                         RoleName = roleName

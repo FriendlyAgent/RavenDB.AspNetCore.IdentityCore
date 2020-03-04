@@ -3,7 +3,7 @@
 namespace RavenDB.Test.Shared
 {
     public class TestUser
-        : IdentityUser
+        : RavenIdentityUser
     {
 
     }

@@ -12,7 +12,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Validators
     /// <typeparam name="TRole"></typeparam>
     public class RavenRoleValidator<TRole>
         : RoleValidator<TRole>
-        where TRole : IdentityRole
+        where TRole : RavenIdentityRole
     {
         /// <summary>
         /// Gets the <see cref="IdentityErrorDescriber"/> used to provider error messages for the current <see cref="RavenRoleValidator{TRole}"/>.

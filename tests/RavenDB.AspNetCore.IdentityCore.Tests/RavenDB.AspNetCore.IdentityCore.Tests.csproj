@@ -7,12 +7,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Moq" Version="4.9.0" />
-    <PackageReference Include="RavenDB.Client" Version="4.0.5" />
-    <PackageReference Include="xunit" Version="2.3.1" />
+    <PackageReference Include="Moq" Version="4.13.1" />
+    <PackageReference Include="RavenDB.Client" Version="4.2.101" />
+    <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.analyzers" Version="0.10.0" />
-    <PackageReference Include="xunit.runner.console" Version="2.4.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
+    <PackageReference Include="xunit.runner.console" Version="2.4.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -26,9 +32,6 @@
     </Reference>
     <Reference Include="Microsoft.Extensions.Identity.Core">
       <HintPath>C:\Program Files\dotnet\sdk\NuGetFallbackFolder\microsoft.extensions.identity.core\2.0.1\lib\netstandard2.0\Microsoft.Extensions.Identity.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="RavenDB.AspNetCore.DependencyInjection">
-      <HintPath>..\..\..\RavenDB.AspNetCore.DependencyInjection\src\RavenDB.AspNetCore.DependencyInjection\bin\Debug\netcoreapp2.0\RavenDB.AspNetCore.DependencyInjection.dll</HintPath>
     </Reference>
   </ItemGroup>
 
