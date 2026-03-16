@@ -1,54 +1,67 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netcoreapp2.0;netcoreapp3.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Description>Replacement package for Identity Core so you can use RavenDB with ASP.NET Identity.</Description>
-    <Copyright>Copyright 2020</Copyright>
+    <Description>Replacement package for Identity Core so you can use RavenDB with ASP.NET Identity. Fully modular -- every component (validators, query handlers, stores, indexes) can be replaced with your own implementation. Includes full support for users, roles, claims, logins, tokens with automatic timestamp tracking for auditing.</Description>
+    <Copyright>Copyright 2025</Copyright>
     <Title>RavenDB AspNetCore IdentityCore</Title>
     <AssemblyTitle>RavenDB AspNetCore IdentityCore</AssemblyTitle>
     <Authors>FriendlyAgent</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>RavenDB.AspNetCore.IdentityCore</AssemblyName>
     <PackageId>RavenDB.AspNetCore.IdentityCore</PackageId>
-    <PackageTags>nosql;ravendb;raven;document;database;client;identitycore;ASP.NET;Identity;core</PackageTags>
+    <PackageTags>nosql;ravendb;raven;document;database;client;identitycore;ASP.NET;Identity;core;authentication;authorization;audit</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageIcon>logo-for-nuget.png</PackageIcon>
     <PackageProjectUrl>https://github.com/FriendlyAgent/RavenDB.AspNetCore.IdentityCore</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/FriendlyAgent/RavenDB.AspNetCore.IdentityCore</RepositoryUrl>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <VersionPrefix>1.1.0-beta</VersionPrefix>
-    <Version>1.1.0-rc</Version>
+
+    <!-- Versioning -->
+    <VersionPrefix>1.1.0</VersionPrefix>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <PackageReleaseNotes>See CHANGELOG.md for details</PackageReleaseNotes>
+
+    <!-- NuGet Package Generation -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);CA2252</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netcoreapp2.0;netcoreapp3.0</TargetFrameworks>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <DefineConstants>NET_8_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <DefineConstants>NET_9_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>NET_10_0</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <DefineConstants>NETSTANDARD_2_0</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp2.0'">
-    <DefineConstants>NETCOREAPP_2_0</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
-    <DefineConstants>NETCOREAPP_3_0</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp2.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="RavenDB.Client" Version="4.2.4" />
+    <!-- Support RavenDB 6.x and 7.x (6.0.2 and above) -->
+    <PackageReference Include="RavenDB.Client" Version="[6.0.2,8.0.0)" />
+  </ItemGroup>
+
+  <!-- Package files -->
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\logo-for-nuget.png" Pack="true" PackagePath="\" Condition="Exists('..\..\logo-for-nuget.png')" />
   </ItemGroup>
 </Project>

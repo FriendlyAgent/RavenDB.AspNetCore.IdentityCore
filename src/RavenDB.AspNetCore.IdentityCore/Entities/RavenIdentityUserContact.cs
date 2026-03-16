@@ -3,7 +3,7 @@
 namespace RavenDB.AspNetCore.IdentityCore.Entities
 {
     /// <summary>
-    /// The class with all  contact information implement.
+    /// Base class for user contact information.
     /// </summary>
     public abstract class RavenIdentityUserContact
     {
@@ -13,7 +13,17 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         public DateTime? ConfirmationOn { get;  set; }
 
         /// <summary>
-        /// Gets  a flag indicating if a user has confirmed their contact info.
+        /// The record tracking when the contact information was first created.
+        /// </summary>
+        public DateTime? CreatedOn { get; set; }
+
+        /// <summary>
+        /// The record tracking when the contact information was last updated.
+        /// </summary>
+        public DateTime? UpdatedOn { get; set; }
+
+        /// <summary>
+        /// Gets a flag indicating if a user has confirmed their contact info.
         /// </summary>
         /// <value>True if the contact info has been confirmed, otherwise false.</value>
         public bool IsConfirmed()
@@ -31,7 +41,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         }
 
         /// <summary>
-        /// Remove the flag indicating if a user had confirmed their contact info.
+        /// Removes the flag indicating if a user had confirmed their contact info.
         /// </summary>
         public void SetUnconfirmed()
         {

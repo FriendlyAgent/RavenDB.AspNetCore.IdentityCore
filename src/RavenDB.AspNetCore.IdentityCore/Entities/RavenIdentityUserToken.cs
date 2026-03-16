@@ -26,5 +26,15 @@
         /// Gets or sets the token value.
         /// </summary>
         public virtual string Value { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the token was created.
+        /// </summary>
+        public System.DateTime? CreatedOn { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the token was last updated.
+        /// </summary>
+        public System.DateTime? UpdatedOn { get; set; }
     }
 }

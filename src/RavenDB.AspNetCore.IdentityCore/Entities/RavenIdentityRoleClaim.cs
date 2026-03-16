@@ -21,27 +21,47 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         public virtual string ClaimValue { get; set; }
 
         /// <summary>
-        /// Compare Claims to see if there equals. 
+        /// Compares this role claim with a <see cref="Claim"/> to determine equality.
         /// </summary>
-        /// <param name="other">The Claim to compare.</param>
+        /// <param name="other">The <see cref="Claim"/> to compare.</param>
         /// <returns>True if equal.</returns>
         public bool Equals(
             Claim other)
         {
-            return other.Type.Equals(ClaimType) &&
-                other.Value.Equals(ClaimValue);
+            if (other is null) return false;
+
+            return string.Equals(other.Type, ClaimType, StringComparison.Ordinal) &&
+                string.Equals(other.Value, ClaimValue, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// Compare IdentityRoleClaims to see if there equals.
+        /// Compares this role claim with another to determine equality.
         /// </summary>
-        /// <param name="other">The IdentityRoleClaims to compare.</param>
+        /// <param name="other">The role claim to compare.</param>
         /// <returns>True if equal.</returns>
         public bool Equals(
             RavenIdentityRoleClaim other)
         {
-            return other.ClaimType.Equals(ClaimType) &&
-                other.ClaimValue.Equals(ClaimValue);
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(other.ClaimType, ClaimType, StringComparison.Ordinal) &&
+                string.Equals(other.ClaimValue, ClaimValue, StringComparison.Ordinal);
+        }
+
+        /// <inheritdoc/>
+        public override bool Equals(object? obj)
+        {
+            return obj is RavenIdentityRoleClaim other && Equals(other)
+                || obj is Claim claim && Equals(claim);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                StringComparer.Ordinal.GetHashCode(ClaimType ?? string.Empty),
+                StringComparer.Ordinal.GetHashCode(ClaimValue ?? string.Empty));
         }
 
         /// <summary>

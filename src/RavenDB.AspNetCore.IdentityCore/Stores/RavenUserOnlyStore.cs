@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Raven.Client.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
+using RavenDB.AspNetCore.IdentityCore.QueryHandlers;
 using RavenDB.AspNetCore.IdentityCore.Stores;
 
 namespace RavenDB.AspNetCore.IdentityCore
@@ -19,12 +21,16 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserOnlyStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
-            IOptions<RavenIdentityUserOptions<RavenIdentityUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor)
+            IOptions<RavenIdentityUserOptions<RavenIdentityUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null,
+            IUserQueryHandler<RavenIdentityUser, IAsyncDocumentSession> userQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, userQueryHandler, loggerFactory)
         {
         }
     }
@@ -44,12 +50,16 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserOnlyStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
-            IOptions<RavenIdentityUserOptions<TUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor)
+            IOptions<RavenIdentityUserOptions<TUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null,
+            IUserQueryHandler<TUser, IAsyncDocumentSession> userQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, userQueryHandler, loggerFactory)
         {
         }
     }
@@ -71,12 +81,16 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserOnlyStore(
             TSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
-            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor)
+            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, userQueryHandler, loggerFactory)
         {
         }
     }
@@ -97,22 +111,24 @@ namespace RavenDB.AspNetCore.IdentityCore
         where TUserLogin : RavenIdentityUserLogin, new()
         where TUserToken : RavenIdentityUserToken, new()
     {
-
         /// <summary>
         /// Constructs a new instance of <see cref="RavenUserOnlyStore"/>.
         /// </summary>
         /// <param name="session">The <see cref="IAsyncDocumentSession"/>.</param>
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
-        /// <param name="ravenUserOptionsAccessor"></param>
+        /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserOnlyStore(
             TSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
-            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor)
+            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, userQueryHandler, loggerFactory)
         {
-
         }
     }
 }

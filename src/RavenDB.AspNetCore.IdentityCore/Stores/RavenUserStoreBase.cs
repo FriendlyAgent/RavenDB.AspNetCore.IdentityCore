@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Raven.Client.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
+using RavenDB.AspNetCore.IdentityCore.QueryHandlers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,7 +40,10 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// </summary>
         public RavenIdentityRoleOptions<TRole, TSession> RavenRoleOptions { get; set; }
 
-        private TSession _session { get; set; }
+        /// <summary>
+        /// The query handler used for querying roles.
+        /// </summary>
+        protected IRoleQueryHandler<TRole, TSession> RoleQueryHandler { get; set; }
 
         /// <summary>
         /// Creates a new instance.
@@ -48,20 +53,23 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStoreBase(
             TSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            IRoleQueryHandler<TRole, TSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, userQueryHandler, loggerFactory)
         {
-            if (session == null)
-                throw new ArgumentNullException(nameof(session));
-
             RavenRoleOptions = ravenRoleOptionsAccessor?.Value ?? new RavenIdentityRoleOptions<TRole, TSession>();
 
-            _session = session;
+            RoleQueryHandler = roleQueryHandler ?? new DefaultRoleQueryHandler<TRole, TSession>(Microsoft.Extensions.Options.Options.Create(RavenRoleOptions));
         }
 
         /// <summary>
@@ -75,18 +83,15 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (string.IsNullOrWhiteSpace(normalizedRoleName))
                 throw new ArgumentNullException(nameof(normalizedRoleName));
 
-            var role = await RavenRoleOptions
-                .Query
-                .GetRoleByNameAsync(_session, normalizedRoleName, cancellationToken);
-
-            if (role == null)
-                throw new InvalidOperationException("Unable to find role.");
+            var role = await RoleQueryHandler
+                .GetByNameAsync(_session, normalizedRoleName, cancellationToken)
+                ?? throw new InvalidOperationException("Unable to find role.");
 
             user.Roles.Add(role.Id);
         }
@@ -101,8 +106,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             var roles = (await _session.LoadAsync<RavenIdentityRole>(user.Roles, cancellationToken))
                 .Select(a => a.Value.RoleName)
@@ -123,15 +128,18 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
+
             if (string.IsNullOrEmpty(normalizedRoleName))
                 throw new ArgumentNullException(nameof(normalizedRoleName));
 
-            var role = await RavenRoleOptions
-                .Query
-                .GetRoleByNameAsync(_session, normalizedRoleName, cancellationToken);
+            var role = await RoleQueryHandler
+                .GetByNameAsync(_session, normalizedRoleName, cancellationToken);
 
-            return await RavenUserOptions
-                .Query
+            // If role doesn't exist, return empty list (no users in non-existent role)
+            if (role == null)
+                return [];
+
+            return await UserQueryHandler
                 .GetUsersInRoleAsync(_session, role.Id, cancellationToken);
         }
 
@@ -147,15 +155,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (string.IsNullOrWhiteSpace(normalizedRoleName))
                 throw new ArgumentNullException(nameof(normalizedRoleName));
 
-            var role = await RavenRoleOptions
-                .Query
-                .GetRoleByNameAsync(_session, normalizedRoleName, cancellationToken);
+            var role = await RoleQueryHandler
+                .GetByNameAsync(_session, normalizedRoleName, cancellationToken);
 
             if (role != null)
                 return user.Roles
@@ -175,15 +182,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (string.IsNullOrWhiteSpace(normalizedRoleName))
                 throw new ArgumentNullException(nameof(normalizedRoleName));
 
-            var role = await RavenRoleOptions
-                .Query
-                .GetRoleByNameAsync(_session, normalizedRoleName, cancellationToken);
+            var role = await RoleQueryHandler
+                .GetByNameAsync(_session, normalizedRoleName, cancellationToken);
 
             if (role != null)
                 user.Roles.Remove(role.Id);

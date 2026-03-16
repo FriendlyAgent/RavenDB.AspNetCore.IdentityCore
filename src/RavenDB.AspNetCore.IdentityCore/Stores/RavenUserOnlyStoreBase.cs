@@ -1,11 +1,12 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Raven.Client.Documents;
 using Raven.Client.Documents.Session;
 using Raven.Client.Exceptions;
-using Raven.Client.Exceptions.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
-using RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints;
+using RavenDB.AspNetCore.IdentityCore.Helpers;
+using RavenDB.AspNetCore.IdentityCore.QueryHandlers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,7 +35,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
            IUserTwoFactorStore<TUser>,
            IUserAuthenticationTokenStore<TUser>,
            IUserAuthenticatorKeyStore<TUser>,
-           IUserTwoFactorRecoveryCodeStore<TUser>
+           IUserTwoFactorRecoveryCodeStore<TUser>,
+           IQueryableUserStore<TUser>
            where TUser : RavenIdentityUser
            where TSession : IAsyncDocumentSession
            where TUserClaim : RavenIdentityUserClaim, new()
@@ -64,9 +66,51 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// </summary>
         public RavenIdentityUserOptions<TUser, TSession> RavenUserOptions { get; set; }
 
-        private TSession _session { get; set; }
+        /// <summary>
+        /// The query handler used for querying users.
+        /// </summary>
+        protected IUserQueryHandler<TUser, TSession> UserQueryHandler { get; set; }
+
+        /// <summary>
+        /// The helper for managing username reservations.
+        /// </summary>
+        private UserNameReservationHelper UserNameReservation { get; set; }
+
+        /// <summary>
+        /// The helper for managing email reservations.
+        /// </summary>
+        private EmailReservationHelper EmailReservation { get; set; }
+
+        protected TSession _session { get; set; }
 
         private bool _disposed;
+
+        /// <summary>
+        /// Gets an IQueryable of users. NOT SUPPORTED - throws <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This property is required by the <see cref="IQueryableUserStore{TUser}"/> interface from
+        /// ASP.NET Core Identity, which is outside of our control. However, RavenDB uses an async
+        /// document session model that is fundamentally incompatible with <see cref="IQueryable{T}"/>.
+        /// Exposing a queryable here would bypass RavenDB's session lifetime management and could lead
+        /// to unexpected behavior with deferred query execution.
+        /// </para>
+        /// <para>
+        /// Instead, inject <see cref="IAsyncDocumentSession"/> and query users directly:
+        /// </para>
+        /// <code>
+        /// // Instead of: userManager.Users.Where(u => ...)
+        /// // Use: session.Query&lt;TUser&gt;().Where(u => ...)
+        /// </code>
+        /// </remarks>
+        /// <exception cref="NotSupportedException">Always thrown when accessed.</exception>
+        public IQueryable<TUser> Users =>
+            throw new NotSupportedException(
+                "IQueryable access via UserManager.Users is not supported. " +
+                "RavenDB's async document session model is incompatible with IQueryable. " +
+                "This property exists because the IQueryableUserStore<TUser> interface requires it. " +
+                "Inject IAsyncDocumentSession and use session.Query<TUser>() instead.");
 
         /// <summary>
         /// Constructs a new instance of <see cref="RavenUserStore"/>.
@@ -75,11 +119,15 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserOnlyStoreBase(
             TSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
-            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null)
+            IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
         {
             if (session == null)
                 throw new ArgumentNullException(nameof(session));
@@ -90,7 +138,20 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
 
             RavenUserOptions = ravenUserOptionsAccessor?.Value ?? new RavenIdentityUserOptions<TUser, TSession>();
 
+            UserQueryHandler = userQueryHandler ?? new DefaultUserQueryHandler<TUser, TSession>(Microsoft.Extensions.Options.Options.Create(RavenUserOptions));
+
+            UserNameReservation = new UserNameReservationHelper(
+                session.Advanced.DocumentStore,
+                logger: loggerFactory?.CreateLogger<UserNameReservationHelper>(),
+                releaseRetryCount: RavenUserOptions.ReservationReleaseRetryCount);
+            EmailReservation = new EmailReservationHelper(
+                session.Advanced.DocumentStore,
+                logger: loggerFactory?.CreateLogger<EmailReservationHelper>(),
+                releaseRetryCount: RavenUserOptions.ReservationReleaseRetryCount);
+
             _session = session;
+
+            AutoSaveChanges = RavenUserOptions.AutoSaveChanges;
         }
 
         /// <summary>
@@ -107,7 +168,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             return new TUserClaim
             {
                 ClaimType = claim.Type,
-                ClaimValue = claim.Value
+                ClaimValue = claim.Value,
+                CreatedOn = DateTime.UtcNow
             };
         }
 
@@ -115,7 +177,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// Called to create a new instance of a <see cref="RavenIdentityUserLogin"/>.
         /// </summary>
         /// <param name="user">The associated user.</param>
-        /// <param name="login">The sasociated login.</param>
+        /// <param name="login">The associated login.</param>
         /// <returns></returns>
         protected virtual TUserLogin CreateUserLogin(TUser user, UserLoginInfo login)
         {
@@ -126,7 +188,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             {
                 ProviderKey = login.ProviderKey,
                 LoginProvider = login.LoginProvider,
-                ProviderDisplayName = login.ProviderDisplayName
+                ProviderDisplayName = login.ProviderDisplayName,
+                CreatedOn = DateTime.UtcNow
             };
         }
 
@@ -144,7 +207,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             {
                 LoginProvider = loginProvider,
                 Name = name,
-                Value = value
+                Value = value,
+                CreatedOn = DateTime.UtcNow
             };
         }
 
@@ -159,16 +223,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (claims == null)
-                throw new ArgumentNullException(nameof(claims));
+            ArgumentNullException.ThrowIfNull(claims);
 
             foreach (var claim in claims)
                 user.Claims.Add(CreateUserClaim(user, claim));
 
-            return Task.FromResult(false);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -182,35 +244,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            if (login == null)
-                throw new ArgumentNullException(nameof(login));
+            ArgumentNullException.ThrowIfNull(user);
+
+            ArgumentNullException.ThrowIfNull(login);
 
             user.Logins.Add(CreateUserLogin(user, login));
 
-            return Task.FromResult(false);
-        }
-
-        /// <summary>
-        /// Creates a constraint on the username.
-        /// </summary>
-        /// <param name="user">The user for which to create the constraint.</param>
-        /// <returns></returns>
-        public static UniqueUserName ToUserNameConstraint(RavenIdentityUser user)
-        {
-            return new UniqueUserName(user.UserName);
-        }
-
-        /// <summary>
-        /// Creates a constraint on the Email.
-        /// </summary>
-        /// <param name="user">The user for which to create the constraint.</param>
-        /// <returns></returns>
-        public static UniqueEmail ToEmailConstraint(RavenIdentityUser user)
-        {
-            return new UniqueEmail(user.GetEmail());
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -223,86 +264,78 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            var previousOptimisticConcurrency = _session.Advanced.UseOptimisticConcurrency;
-            var uniqueUserNameConstraint = ToUserNameConstraint(user);
-            var uniqueEmailConstraint = ToEmailConstraint(user);
+            ArgumentNullException.ThrowIfNull(user);
 
-            try
+            var normalizedUserName = user.NormalizedUserName ?? user.UserName;
+            var normalizedEmail = user.Email?.NormalizedEmail ?? user.Email?.Email;
+
+            if (RavenUserOptions.EnforceUniqueConstraints)
             {
-                _session.Advanced.UseOptimisticConcurrency = true;
+                var usernameReserved = await UserNameReservation.TryReserveAsync(normalizedUserName, "pending", cancellationToken);
 
-                await _session
-                    .StoreAsync(uniqueUserNameConstraint, cancellationToken)
-                    .ConfigureAwait(true);
+                if (!usernameReserved)
+                {
+                    return IdentityResult.Failed(ErrorDescriber.DuplicateUserName(user.UserName));
+                }
 
-                if (Options.User.RequireUniqueEmail)
-                    await _session
-                        .StoreAsync(uniqueEmailConstraint, cancellationToken)
-                        .ConfigureAwait(false);
+                var emailReserved = false;
+                if (Options.User.RequireUniqueEmail && !string.IsNullOrWhiteSpace(normalizedEmail))
+                {
+                    emailReserved = await EmailReservation.TryReserveAsync(normalizedEmail, "pending", cancellationToken);
 
+                    if (!emailReserved)
+                    {
+                        await UserNameReservation.TryReleaseAsync(normalizedUserName, cancellationToken);
+                        return IdentityResult.Failed(ErrorDescriber.DuplicateEmail(user.Email.Email));
+                    }
+                }
+
+                try
+                {
+                    await _session.StoreAsync(user, cancellationToken).ConfigureAwait(false);
+
+                    var usernameUpdated = await UserNameReservation.TryUpdateAsync(normalizedUserName, user.Id, cancellationToken);
+                    if (!usernameUpdated)
+                    {
+                        _session.Advanced.Evict(user);
+                        await UserNameReservation.TryReleaseAsync(normalizedUserName, cancellationToken);
+                        if (Options.User.RequireUniqueEmail && emailReserved)
+                        {
+                            await EmailReservation.TryReleaseAsync(normalizedEmail, cancellationToken);
+                        }
+                        return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                    }
+
+                    if (Options.User.RequireUniqueEmail && emailReserved)
+                    {
+                        var emailUpdated = await EmailReservation.TryUpdateAsync(normalizedEmail, user.Id, cancellationToken);
+                        if (!emailUpdated)
+                        {
+                            _session.Advanced.Evict(user);
+                            await UserNameReservation.TryReleaseAsync(normalizedUserName, cancellationToken);
+                            await EmailReservation.TryReleaseAsync(normalizedEmail, cancellationToken);
+                            return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                        }
+                    }
+
+                    await SaveChanges(cancellationToken: cancellationToken);
+                }
+                catch (Exception)
+                {
+                    _session.Advanced.Evict(user);
+                    await UserNameReservation.TryReleaseAsync(normalizedUserName, cancellationToken);
+                    if (Options.User.RequireUniqueEmail && emailReserved)
+                    {
+                        await EmailReservation.TryReleaseAsync(normalizedEmail, cancellationToken);
+                    }
+                    throw;
+                }
+            }
+            else
+            {
+                await _session.StoreAsync(user, cancellationToken).ConfigureAwait(false);
                 await SaveChanges(cancellationToken: cancellationToken);
-
-                await _session.StoreAsync(user, cancellationToken)
-                    .ConfigureAwait(false);
-
-                uniqueUserNameConstraint.RelationId = user.Id;
-                if (Options.User.RequireUniqueEmail)
-                    uniqueEmailConstraint.RelationId = user.Id;
-
-                await SaveChanges(cancellationToken: cancellationToken);
-            }
-            catch (ConcurrencyException ex)
-            {
-                _session.Advanced.Evict(uniqueUserNameConstraint);
-                _session.Advanced.Evict(user);
-
-                if (Options.User.RequireUniqueEmail)
-                    _session.Advanced.Evict(uniqueEmailConstraint);
-
-                if (ex.Message
-                    .Contains(uniqueUserNameConstraint.Id)) // username error
-                {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateUserName(user.UserName));
-                }
-                else if (ex.Message
-                    .Contains(uniqueEmailConstraint.Id)) // email error
-                {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateEmail(user.Email.Email));
-                }
-
-                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
-            }
-            catch (NonUniqueObjectException ex)
-            {
-                _session.Advanced.Evict(uniqueUserNameConstraint);
-                _session.Advanced.Evict(user);
-
-                if (Options.User.RequireUniqueEmail)
-                    _session.Advanced.Evict(uniqueEmailConstraint);
-
-                if (ex.Message
-                    .Contains(uniqueUserNameConstraint.Id)) // username error
-                {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateUserName(user.UserName));
-                }
-                else if (ex.Message
-                    .Contains(uniqueEmailConstraint.Id)) // email error
-                {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateEmail(user.Email.Email));
-                }
-
-                throw;
-            }
-            finally
-            {
-                _session.Advanced.UseOptimisticConcurrency = previousOptimisticConcurrency;
             }
 
             return IdentityResult.Success;
@@ -318,19 +351,26 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
+
+            var normalizedUserName = user.NormalizedUserName ?? user.UserName;
+            var normalizedEmail = user.Email?.NormalizedEmail ?? user.Email?.Email;
 
             try
             {
-                var uniqueUserNameConstraint = ToUserNameConstraint(user);
-                var uniqueEmailAddressConstraint = ToEmailConstraint(user);
-
-                _session.Delete(uniqueUserNameConstraint.Id);
-                _session.Delete(uniqueEmailAddressConstraint.Id);
                 _session.Delete(user);
-
                 await SaveChanges(cancellationToken: cancellationToken);
+
+                if (RavenUserOptions.EnforceUniqueConstraints)
+                {
+                    await UserNameReservation.TryReleaseAsync(normalizedUserName, cancellationToken);
+
+                    if (Options.User.RequireUniqueEmail && !string.IsNullOrWhiteSpace(normalizedEmail))
+                    {
+                        await EmailReservation.TryReleaseAsync(normalizedEmail, cancellationToken);
+                    }
+                }
             }
             catch (ConcurrencyException)
             {
@@ -352,12 +392,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (normalizedEmail == null)
-                throw new ArgumentNullException(nameof(normalizedEmail));
 
-            return await RavenUserOptions
-                .Query
-                .GetUserByEmailAsync(_session, normalizedEmail, cancellationToken);
+            ArgumentNullException.ThrowIfNull(normalizedEmail);
+
+            return await UserQueryHandler
+                .GetByEmailAsync(_session, normalizedEmail, cancellationToken);
         }
 
 
@@ -373,8 +412,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (userId == null)
-                throw new ArgumentNullException(nameof(userId));
+
+            ArgumentNullException.ThrowIfNull(userId);
 
             return _session.LoadAsync<TUser>(userId, cancellationToken);
         }
@@ -392,15 +431,13 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (loginProvider == null)
-                throw new ArgumentNullException(nameof(loginProvider));
 
-            if (providerKey == null)
-                throw new ArgumentNullException(nameof(providerKey));
+            ArgumentNullException.ThrowIfNull(loginProvider);
 
-            return await RavenUserOptions
-                .Query
-                .GetUserByLoginAsync(_session, loginProvider, providerKey, cancellationToken);
+            ArgumentNullException.ThrowIfNull(providerKey);
+
+            return await UserQueryHandler
+                .GetByLoginAsync(_session, loginProvider, providerKey, cancellationToken);
         }
 
         /// <summary>
@@ -415,12 +452,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (normalizedUserName == null)
-                throw new ArgumentNullException(nameof(normalizedUserName));
 
-            return await RavenUserOptions
-                .Query
-                .GetUserByNameAsync(_session, normalizedUserName, cancellationToken);
+            ArgumentNullException.ThrowIfNull(normalizedUserName);
+
+            return await UserQueryHandler
+                .GetByNameAsync(_session, normalizedUserName, cancellationToken);
         }
 
         /// <summary>
@@ -433,8 +469,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.AccessFailedCount);
         }
@@ -449,8 +485,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             var claims = user.Claims.
                 Select(claim => claim
@@ -466,12 +502,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="user">The user whose email should be returned.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The task object containing the results of the asynchronous operation, the email address for the specified <paramref name="user"/>.</returns>
-        public virtual Task<string> GetEmailAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetEmailAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.GetEmail());
         }
@@ -490,13 +526,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (user.Email == null)
-                throw new InvalidOperationException("Unable get the confirmation of the email, because the user doesn't have an email.");
-
-            return Task.FromResult(user.IsEmailConfirmed());
+            return user.Email == null
+                ? throw new InvalidOperationException("Unable get the confirmation of the email, because the user doesn't have an email.")
+                : Task.FromResult(user.IsEmailConfirmed());
         }
 
         /// <summary>
@@ -511,8 +545,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.IsLockoutEnabled);
         }
@@ -531,8 +565,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             DateTimeOffset? lockoutEndDate;
             if (user.LockoutEndDate != null)
@@ -555,8 +589,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             var logins = user.Logins.
                 Select(login => login
@@ -574,12 +608,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <returns>
         /// The task object containing the results of the asynchronous lookup operation, the normalized email address if any associated with the specified user.
         /// </returns>
-        public virtual Task<string> GetNormalizedEmailAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetNormalizedEmailAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             string normalizedEmail = (user.Email != null) ?
                 user.Email.NormalizedEmail : null;
@@ -593,12 +627,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// </summary>
         /// <param name="user">The user whose normalized name should be retrieved.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
-        public virtual Task<string> GetNormalizedUserNameAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetNormalizedUserNameAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.NormalizedUserName);
         }
@@ -609,12 +643,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="user">The user to retrieve the password hash for.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>A <see cref="Task{TResult}"/> that contains the password hash for the user.</returns>
-        public virtual Task<string> GetPasswordHashAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetPasswordHashAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.PasswordHash);
         }
@@ -625,12 +659,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="user">The user whose telephone number should be retrieved.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation, containing the user's telephone number, if any.</returns>
-        public virtual Task<string> GetPhoneNumberAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetPhoneNumberAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.GetPhoneNumber());
         }
@@ -648,8 +682,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (user.PhoneNumber == null)
                 throw new InvalidOperationException("Unable get the confirmation of the phone number, because the user doesn't have an phone number.");
@@ -663,12 +697,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="user">The user whose security stamp should be set.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation, containing the security stamp for the specified <paramref name="user"/>.</returns>
-        public virtual Task<string> GetSecurityStampAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetSecurityStampAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.SecurityStamp);
         }
@@ -690,8 +724,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
             var token = user.Tokens
                 .SingleOrDefault(a => a.Name == name && a.LoginProvider == loginProvider);
@@ -717,8 +750,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.IsTwoFactorEnabled);
         }
@@ -733,8 +766,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.Id);
         }
@@ -745,12 +778,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="user">The user whose name should be retrieved.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation, containing the name for the specified <paramref name="user"/>.</returns>
-        public virtual Task<string> GetUserNameAsync(TUser user, CancellationToken cancellationToken = default)
+        public virtual Task<string?> GetUserNameAsync(TUser user, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.UserName);
         }
@@ -767,11 +800,10 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (claim == null)
-                throw new ArgumentNullException(nameof(claim));
 
-            return await RavenUserOptions
-                .Query
+            ArgumentNullException.ThrowIfNull(claim);
+
+            return await UserQueryHandler
                 .GetUsersForClaimAsync(_session, claim, cancellationToken);
         }
 
@@ -786,8 +818,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             return Task.FromResult(user.PasswordHash != null);
         }
@@ -802,8 +834,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.AccessFailedCount += 1;
             return Task.FromResult(user.AccessFailedCount);
@@ -819,6 +851,13 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
         public virtual Task RemoveClaimsAsync(TUser user, IEnumerable<Claim> claims, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfDisposed();
+
+            ArgumentNullException.ThrowIfNull(user);
+
+            ArgumentNullException.ThrowIfNull(claims);
+
             foreach (var claim in claims)
             {
                 var userClaim = user.Claims
@@ -827,7 +866,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
                 if (userClaim != null)
                     user.Claims.Remove(userClaim);
             }
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -842,14 +881,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (loginProvider == null)
-                throw new ArgumentNullException(nameof(loginProvider));
+            ArgumentNullException.ThrowIfNull(loginProvider);
 
-            if (providerKey == null)
-                throw new ArgumentNullException(nameof(providerKey));
+            ArgumentNullException.ThrowIfNull(providerKey);
 
             var login = user.Logins
                 .SingleOrDefault(a => a.ProviderKey == providerKey && a.LoginProvider == loginProvider);
@@ -857,7 +893,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             if (login != null)
                 user.Logins.Remove(login);
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -872,14 +908,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (loginProvider == null)
-                throw new ArgumentNullException(nameof(loginProvider));
+            ArgumentNullException.ThrowIfNull(loginProvider);
 
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
 
             var token = user.Tokens
                 .SingleOrDefault(a => a.Name == name && a.LoginProvider == loginProvider);
@@ -887,7 +920,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             if (token != null)
                 user.Tokens.Remove(token);
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -901,14 +934,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         public virtual Task ReplaceClaimAsync(TUser user, Claim claim, Claim newClaim, CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (claim == null)
-                throw new ArgumentNullException(nameof(claim));
+            ArgumentNullException.ThrowIfNull(claim);
 
-            if (newClaim == null)
-                throw new ArgumentNullException(nameof(newClaim));
+            ArgumentNullException.ThrowIfNull(newClaim);
 
             var matchedClaims = user.Claims
                 .Where(a => a.Equals(claim))
@@ -918,6 +948,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             {
                 matchedClaim.ClaimValue = newClaim.Value;
                 matchedClaim.ClaimType = newClaim.Type;
+                matchedClaim.UpdatedOn = DateTime.UtcNow;
             }
 
             return Task.CompletedTask;
@@ -934,11 +965,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.AccessFailedCount = 0;
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -948,16 +979,16 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="email">The email to set.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The task object representing the asynchronous operation.</returns>
-        public virtual Task SetEmailAsync(TUser user, string email, CancellationToken cancellationToken = default)
+        public virtual Task SetEmailAsync(TUser user, string? email, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            user.Email = new RavenIdentityUserEmail(email);
+            ArgumentNullException.ThrowIfNull(user);
 
-            return Task.FromResult(0);
+            user.Email = email != null ? new RavenIdentityUserEmail(email) : null;
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -971,8 +1002,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
             if (user.Email == null)
                 throw new InvalidOperationException("Unable to set the confirmation status of the email, because the user doesn't have an email.");
@@ -982,7 +1012,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             else
                 user.Email.SetUnconfirmed();
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -996,12 +1026,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.IsLockoutEnabled = enabled;
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1015,13 +1045,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            if (lockoutEnd != null)
-                user.LockoutEndDate = lockoutEnd.Value.UtcDateTime;
+            ArgumentNullException.ThrowIfNull(user);
 
-            return Task.FromResult(0);
+            user.LockoutEndDate = lockoutEnd?.UtcDateTime;
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1035,13 +1064,13 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (normalizedEmail != null && user.Email != null)
                 user.Email.NormalizedEmail = normalizedEmail;
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1054,11 +1083,10 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
             user.NormalizedUserName = normalizedName ?? throw new ArgumentNullException(nameof(normalizedName));
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
 
@@ -1073,11 +1101,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            user.PasswordHash = passwordHash ?? throw new ArgumentNullException(nameof(passwordHash));
-            return Task.FromResult(0);
+            ArgumentNullException.ThrowIfNull(user);
+
+            user.PasswordHash = passwordHash;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1087,16 +1115,16 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="phoneNumber">The telephone number to set.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
-        public virtual Task SetPhoneNumberAsync(TUser user, string phoneNumber, CancellationToken cancellationToken = default)
+        public virtual Task SetPhoneNumberAsync(TUser user, string? phoneNumber, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
 
-            user.PhoneNumber = new RavenIdentityUserPhoneNumber(phoneNumber);
+            ArgumentNullException.ThrowIfNull(user);
 
-            return Task.FromResult(0);
+            user.PhoneNumber = phoneNumber != null ? new RavenIdentityUserPhoneNumber(phoneNumber) : null;
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1110,8 +1138,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             if (user.PhoneNumber == null)
                 throw new InvalidOperationException("Unable to set the confirmation status of the phone number, because the user doesn't have an phone number.");
@@ -1121,7 +1149,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             else
                 user.PhoneNumber.SetUnconfirmed();
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1135,11 +1163,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.SecurityStamp = stamp ?? throw new ArgumentNullException(nameof(stamp));
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1155,8 +1183,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             var token = user.Tokens
                 .SingleOrDefault(a => a.Name == name && a.LoginProvider == loginProvider);
@@ -1164,7 +1192,10 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             if (token == null)
                 user.Tokens.Add(CreateUserToken(user, loginProvider, name, value));
             else
+            {
                 token.Value = value;
+                token.UpdatedOn = DateTime.UtcNow;
+            }
 
             return Task.CompletedTask;
         }
@@ -1181,11 +1212,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.IsTwoFactorEnabled = enabled;
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1195,16 +1226,16 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// <param name="userName">The user name to set.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
-        public virtual Task SetUserNameAsync(TUser user, string userName, CancellationToken cancellationToken = default)
+        public virtual Task SetUserNameAsync(TUser user, string? userName, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
 
             user.UserName = userName;
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1217,17 +1248,139 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+
+            ArgumentNullException.ThrowIfNull(user);
+
+            // Check what changed in this session
+            var changes = _session.Advanced.WhatChanged();
+            var hasUserChanged = changes.TryGetValue(user.Id, out var userChanges);
+
+            if (!hasUserChanged || userChanges == null || userChanges.Length == 0)
+            {
+                // No changes to this document
+                return IdentityResult.Success;
+            }
+
+            // Check for username change
+            var usernameChange = userChanges.FirstOrDefault(c =>
+                c.FieldName == nameof(user.NormalizedUserName) || c.FieldName == nameof(user.UserName));
+            var emailChange = userChanges.FirstOrDefault(c =>
+                c.FieldName == nameof(user.Email) ||
+                c.FieldName == "Email.NormalizedEmail" ||
+                c.FieldName == "Email.Email");
+            var phoneNumberChange = userChanges.FirstOrDefault(c =>
+                c.FieldName == nameof(user.PhoneNumber) ||
+                c.FieldName == "PhoneNumber.Number");
+
+            string oldNormalizedUserName = null;
+            string currentNormalizedUserName = user.NormalizedUserName ?? user.UserName;
+            bool usernameChanged = false;
+
+            if (usernameChange != null)
+            {
+                oldNormalizedUserName = usernameChange.FieldOldValue?.ToString();
+                usernameChanged = !string.IsNullOrEmpty(oldNormalizedUserName) &&
+                                 !string.Equals(oldNormalizedUserName, currentNormalizedUserName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            string oldNormalizedEmail = null;
+            string currentNormalizedEmail = user.Email?.NormalizedEmail ?? user.Email?.Email;
+            bool emailChanged = false;
+
+            if (Options.User.RequireUniqueEmail && emailChange != null)
+            {
+                // Handle case where entire Email object is replaced (FieldOldValue is RavenIdentityUserEmail)
+                if (emailChange.FieldOldValue is RavenIdentityUserEmail oldEmailObj)
+                {
+                    oldNormalizedEmail = oldEmailObj.NormalizedEmail ?? oldEmailObj.Email;
+                }
+                else
+                {
+                    // Handle case where nested property changed (FieldOldValue is string)
+                    oldNormalizedEmail = emailChange.FieldOldValue?.ToString();
+                }
+
+                emailChanged = !string.IsNullOrEmpty(oldNormalizedEmail) &&
+                              !string.Equals(oldNormalizedEmail, currentNormalizedEmail, StringComparison.OrdinalIgnoreCase);
+            }
 
             try
             {
+                if (RavenUserOptions.EnforceUniqueConstraints)
+                {
+                    if (usernameChanged)
+                    {
+                        var usernameReserved = await UserNameReservation.TryReserveAsync(currentNormalizedUserName, user.Id, cancellationToken);
+                        if (!usernameReserved)
+                        {
+                            return IdentityResult.Failed(ErrorDescriber.DuplicateUserName(user.UserName));
+                        }
+                    }
+
+                    if (emailChanged && !string.IsNullOrWhiteSpace(currentNormalizedEmail))
+                    {
+                        var emailReserved = await EmailReservation.TryReserveAsync(currentNormalizedEmail, user.Id, cancellationToken);
+                        if (!emailReserved)
+                        {
+                            if (usernameChanged)
+                            {
+                                await UserNameReservation.TryReleaseAsync(currentNormalizedUserName, cancellationToken);
+                            }
+                            return IdentityResult.Failed(ErrorDescriber.DuplicateEmail(user.Email.Email));
+                        }
+                    }
+                }
+
+                // Update timestamps for contact information changes
+                if (emailChange != null && user.Email != null)
+                {
+                    // If old value was not null, this is an update to existing email
+                    if (emailChange.FieldOldValue != null && !(emailChange.FieldName == nameof(user.Email) && emailChange.FieldOldValue is null))
+                    {
+                        user.Email.UpdatedOn = DateTime.UtcNow;
+                    }
+                }
+
+                if (phoneNumberChange != null && user.PhoneNumber != null)
+                {
+                    // If old value was not null, this is an update to existing phone number
+                    if (phoneNumberChange.FieldOldValue != null && !(phoneNumberChange.FieldName == nameof(user.PhoneNumber) && phoneNumberChange.FieldOldValue is null))
+                    {
+                        user.PhoneNumber.UpdatedOn = DateTime.UtcNow;
+                    }
+                }
+
                 user.ConcurrencyStamp = Guid.NewGuid().ToString();
                 await SaveChanges(cancellationToken: cancellationToken);
+
+                if (RavenUserOptions.EnforceUniqueConstraints)
+                {
+                    if (usernameChanged)
+                    {
+                        await UserNameReservation.TryReleaseAsync(oldNormalizedUserName, cancellationToken);
+                    }
+
+                    if (emailChanged && !string.IsNullOrWhiteSpace(oldNormalizedEmail))
+                    {
+                        await EmailReservation.TryReleaseAsync(oldNormalizedEmail, cancellationToken);
+                    }
+                }
             }
-            catch (ConcurrencyException)
+            catch (Exception)
             {
-                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                if (RavenUserOptions.EnforceUniqueConstraints)
+                {
+                    if (usernameChanged)
+                    {
+                        await UserNameReservation.TryReleaseAsync(currentNormalizedUserName, cancellationToken);
+                    }
+
+                    if (emailChanged && !string.IsNullOrWhiteSpace(currentNormalizedEmail))
+                    {
+                        await EmailReservation.TryReleaseAsync(currentNormalizedEmail, cancellationToken);
+                    }
+                }
+                throw;
             }
 
             return IdentityResult.Success;
@@ -1278,11 +1431,9 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            if (user == null)
-                throw new ArgumentNullException(nameof(user));
+            ArgumentNullException.ThrowIfNull(user);
 
-            if (code == null)
-                throw new ArgumentNullException(nameof(code));
+            ArgumentNullException.ThrowIfNull(code);
 
             var mergedCodes = await GetTokenAsync(user, InternalLoginProvider, RecoveryCodeTokenName, cancellationToken) ?? "";
             var splitCodes = mergedCodes.Split(';');
@@ -1307,10 +1458,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            if (user == null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             var mergedCodes = await GetTokenAsync(
                 user,
                 InternalLoginProvider,
@@ -1318,7 +1467,14 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
                 cancellationToken) ?? "";
 
             if (mergedCodes.Length > 0)
+            {
+#if NET8_0_OR_GREATER
+                // Use Span for zero-allocation counting in .NET 8+
+                return mergedCodes.AsSpan().Count(';') + 1;
+#else
                 return mergedCodes.Split(';').Length;
+#endif
+            }
 
             return 0;
         }
@@ -1341,8 +1497,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Stores
         /// </summary>
         protected void ThrowIfDisposed()
         {
-            if (_disposed)
-                throw new ObjectDisposedException(GetType().Name);
+            ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
         /// <summary>

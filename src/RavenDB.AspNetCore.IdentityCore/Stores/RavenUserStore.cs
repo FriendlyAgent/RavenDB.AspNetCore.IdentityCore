@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Raven.Client.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
+using RavenDB.AspNetCore.IdentityCore.QueryHandlers;
 using RavenDB.AspNetCore.IdentityCore.Stores;
 
 namespace RavenDB.AspNetCore.IdentityCore
@@ -20,13 +22,19 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<RavenIdentityUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<RavenIdentityUser, IAsyncDocumentSession> userQueryHandler = null,
+            IRoleQueryHandler<RavenIdentityRole, IAsyncDocumentSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor, userQueryHandler, roleQueryHandler, loggerFactory)
         {
         }
     }
@@ -47,13 +55,19 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<TUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<TUser, IAsyncDocumentSession> userQueryHandler = null,
+            IRoleQueryHandler<RavenIdentityRole, IAsyncDocumentSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor, userQueryHandler, roleQueryHandler, loggerFactory)
         {
         }
     }
@@ -76,13 +90,19 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<TUser, IAsyncDocumentSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<TRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<TUser, IAsyncDocumentSession> userQueryHandler = null,
+            IRoleQueryHandler<TRole, IAsyncDocumentSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor, userQueryHandler, roleQueryHandler, loggerFactory)
         {
         }
     }
@@ -107,13 +127,19 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStore(
             TSession session,
             IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            IRoleQueryHandler<TRole, TSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor, userQueryHandler, roleQueryHandler, loggerFactory)
         {
         }
     }
@@ -147,13 +173,19 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <param name="optionsAccessor">The configured <see cref="IdentityOptions"/>.</param>
         /// <param name="ravenUserOptionsAccessor">The configured <see cref="RavenIdentityUserOptions"/>.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="userQueryHandler">The query handler for user queries. If not provided, uses the default implementation.</param>
+        /// <param name="roleQueryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenUserStore(
-            TSession session, 
-            IdentityErrorDescriber describer = null, 
+            TSession session,
+            IdentityErrorDescriber describer = null,
             IOptions<IdentityOptions> optionsAccessor = null,
             IOptions<RavenIdentityUserOptions<TUser, TSession>> ravenUserOptionsAccessor = null,
-            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null,
+            IUserQueryHandler<TUser, TSession> userQueryHandler = null,
+            IRoleQueryHandler<TRole, TSession> roleQueryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, optionsAccessor, ravenUserOptionsAccessor, ravenRoleOptionsAccessor, userQueryHandler, roleQueryHandler, loggerFactory)
         {
         }
     }

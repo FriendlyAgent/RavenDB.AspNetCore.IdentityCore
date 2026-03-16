@@ -6,7 +6,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
     /// <summary>
     /// Represents a login and its associated provider for a user.
     /// </summary>
-    public class RavenIdentityUserLogin 
+    public class RavenIdentityUserLogin
         : IEquatable<RavenIdentityUserLogin>,
         IEquatable<UserLoginInfo>
     {
@@ -26,6 +26,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         public virtual string ProviderDisplayName { get; set; }
 
         /// <summary>
+        /// Gets or sets when the login was created.
+        /// </summary>
+        public DateTime? CreatedOn { get; set; }
+
+        /// <summary>
         /// Converts the entity into a UserLoginInfo instance.
         /// </summary>
         /// <returns>The UserLoginInfo.</returns>
@@ -34,27 +39,48 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
             return new UserLoginInfo(LoginProvider, ProviderKey, ProviderDisplayName);
         }
 
+        /// <inheritdoc/>
+        public override bool Equals(object? obj)
+        {
+            return obj is RavenIdentityUserLogin other && Equals(other)
+                || obj is UserLoginInfo info && Equals(info);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                StringComparer.Ordinal.GetHashCode(LoginProvider ?? string.Empty),
+                StringComparer.Ordinal.GetHashCode(ProviderKey ?? string.Empty));
+        }
+
         /// <summary>
-        /// Compare IdentityUserLogin to see if there equals.
+        /// Compares this login with another to determine equality.
         /// </summary>
-        /// <param name="other">The IdentityUserLogin to compare.</param>
+        /// <param name="other">The login to compare.</param>
         /// <returns>True if equal.</returns>
         public bool Equals(
             RavenIdentityUserLogin other)
         {
-            return other.LoginProvider.Equals(LoginProvider)
-                && other.ProviderKey.Equals(ProviderKey);
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(other.LoginProvider, LoginProvider, StringComparison.Ordinal)
+                && string.Equals(other.ProviderKey, ProviderKey, StringComparison.Ordinal);
         }
+
         /// <summary>
-        /// Compare UserLoginInfo to see if there equals.
+        /// Compares this login with a <see cref="UserLoginInfo"/> to determine equality.
         /// </summary>
-        /// <param name="other">The UserLoginInfo to compare.</param>
+        /// <param name="other">The <see cref="UserLoginInfo"/> to compare.</param>
         /// <returns>True if equal.</returns>
         public bool Equals(
             UserLoginInfo other)
         {
-            return other.LoginProvider.Equals(LoginProvider)
-                && other.ProviderKey.Equals(ProviderKey);
+            if (other is null) return false;
+
+            return string.Equals(other.LoginProvider, LoginProvider, StringComparison.Ordinal)
+                && string.Equals(other.ProviderKey, ProviderKey, StringComparison.Ordinal);
         }
     }
 }

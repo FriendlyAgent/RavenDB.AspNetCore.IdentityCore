@@ -1,0 +1,69 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sample: MVC App",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/samples/IdentitySample.Mvc/bin/Debug/net9.0/IdentitySample.Mvc.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/samples/IdentitySample.Mvc",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "preLaunchTask": "build",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    },
+    {
+      "name": "Sample: API Endpoints",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/samples/IdentitySample.ApiEndpoints/bin/Debug/net9.0/IdentitySample.ApiEndpoints.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/samples/IdentitySample.ApiEndpoints",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "Sample: Default UI",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/samples/IdentitySample.DefaultUI/bin/Debug/net9.0/IdentitySample.DefaultUI.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/samples/IdentitySample.DefaultUI",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "preLaunchTask": "build",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "RavenDB + Sample: MVC App",
+      "configurations": ["Sample: MVC App"],
+      "preLaunchTask": "ravendb: start",
+      "stopAll": false
+    },
+    {
+      "name": "RavenDB + Sample: API Endpoints",
+      "configurations": ["Sample: API Endpoints"],
+      "preLaunchTask": "ravendb: start",
+      "stopAll": false
+    },
+    {
+      "name": "RavenDB + Sample: Default UI",
+      "configurations": ["Sample: Default UI"],
+      "preLaunchTask": "ravendb: start",
+      "stopAll": false
+    }
+  ]
+}

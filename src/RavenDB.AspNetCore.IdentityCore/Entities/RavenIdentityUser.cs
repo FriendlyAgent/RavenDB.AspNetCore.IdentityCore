@@ -34,7 +34,7 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// Initializes a new instance of <see cref="RavenIdentityUser"/>.
         /// </summary>
         /// <param name="userName">The user name.</param>
-        /// <param name="email">The email</param>
+        /// <param name="email">The email address.</param>
         /// <remarks>
         /// The Id property is initialized to from a new GUID string value.
         /// </remarks>
@@ -47,11 +47,11 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
     }
 
     /// <summary>
-    /// Represents a user in the identity system
+    /// Represents a user in the identity system.
     /// </summary>
     /// <typeparam name="TUserClaim">The type representing a claim.</typeparam>
     /// <typeparam name="TUserLogin">The type representing a user external login.</typeparam>
-    /// <typeparam name="TUserToken">The type representing a user external login.</typeparam>
+    /// <typeparam name="TUserToken">The type representing a user token.</typeparam>
     public class RavenIdentityUser<TUserClaim, TUserLogin, TUserToken>
         where TUserClaim : RavenIdentityUserClaim, new()
         where TUserLogin : RavenIdentityUserLogin, new()
@@ -84,8 +84,8 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         /// <summary>
         /// Initializes a new instance of <see cref="RavenIdentityUser"/>.
         /// </summary>
-        /// <param name="userName"></param>
-        /// <param name="email"></param>
+        /// <param name="userName">The user name.</param>
+        /// <param name="email">The email address.</param>
         public RavenIdentityUser(
             string userName, 
             string email)
@@ -197,12 +197,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         }
 
         /// <summary>
-        /// A random value that must change whenever a users credentials change (password changed, login removed)
+        /// A random value that must change whenever a user's credentials change (password changed, login removed).
         /// </summary>
         public string SecurityStamp { get; set; }
 
         /// <summary>
-        /// A random value that must change whenever a user is persisted to the store
+        /// A random value that must change whenever a user is persisted to the store.
         /// </summary>
         public virtual string ConcurrencyStamp { get; set; }
 
@@ -217,12 +217,12 @@ namespace RavenDB.AspNetCore.IdentityCore.Entities
         public virtual List<TUserClaim> Claims { get; set; }
 
         /// <summary>
-        /// Navigation property for this users login accounts.
+        /// Navigation property for this user's login accounts.
         /// </summary>
         public virtual List<TUserLogin> Logins { get; set; }
 
         /// <summary>
-        /// Navigation property for this users tokens.
+        /// Navigation property for this user's tokens.
         /// </summary>
         public virtual List<TUserToken> Tokens { get; set; }
 

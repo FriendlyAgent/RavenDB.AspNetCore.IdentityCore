@@ -1,0 +1,65 @@
+@{
+    Layout = "/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Home Page";
+}
+
+<div class="jumbotron">
+    <h1>RavenDB Identity - Default UI Sample</h1>
+    <p class="lead">This sample demonstrates ASP.NET Core Identity with the Default UI scaffolding, backed by RavenDB.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <dl>
+            <dt>Default Identity UI</dt>
+            <dd>
+                This sample uses <code>AddDefaultUI()</code> to include all the standard Identity pages
+                (Login, Register, Manage, etc.) with only the Register and Profile pages customized
+                to add Name and Age fields.
+            </dd>
+        </dl>
+    </div>
+    <div class="col-md-4">
+        <dl>
+            <dt>Custom User Properties</dt>
+            <dd>
+                The <code>ApplicationUser</code> class extends <code>RavenIdentityUser</code> with
+                custom <strong>Name</strong> and <strong>Age</strong> properties, showing how easy it is
+                to add profile data to the identity model.
+            </dd>
+        </dl>
+    </div>
+    <div class="col-md-4">
+        <dl>
+            <dt>RavenDB Storage</dt>
+            <dd>
+                All identity data is stored in RavenDB using static indexes and Compare-Exchange
+                for atomic uniqueness constraints. No Entity Framework or SQL Server required.
+            </dd>
+        </dl>
+    </div>
+    <div class="col-md-4">
+        <dl>
+            <dt>Test Accounts</dt>
+            <dd>
+                The database is seeded with two test accounts on first run:
+                <ul>
+                    <li><strong>admin@example.com</strong> / Admin123! (Admin role)</li>
+                    <li><strong>user@example.com</strong> / User123! (User role)</li>
+                </ul>
+            </dd>
+        </dl>
+    </div>
+    <div class="col-md-4">
+        <dl>
+            <dt>Getting Started</dt>
+            <dd>
+                <ol>
+                    <li>Run <code>docker-compose up -d</code> from the repository root</li>
+                    <li>Run this sample with <code>dotnet run</code></li>
+                    <li>Register a new account or log in with a test account</li>
+                </ol>
+            </dd>
+        </dl>
+    </div>
+</div>

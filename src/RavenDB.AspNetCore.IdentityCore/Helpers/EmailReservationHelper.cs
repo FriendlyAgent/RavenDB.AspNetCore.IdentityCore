@@ -1,0 +1,26 @@
+using Microsoft.Extensions.Logging;
+using Raven.Client.Documents;
+
+namespace RavenDB.AspNetCore.IdentityCore.Helpers
+{
+    /// <summary>
+    /// Helper class for managing email reservations using Compare Exchange.
+    /// </summary>
+    public class EmailReservationHelper : CompareExchangeReservationHelper
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EmailReservationHelper"/> class.
+        /// </summary>
+        /// <param name="documentStore">The document store.</param>
+        /// <param name="logger">Optional logger for tracking reservation operations.</param>
+        /// <param name="releaseRetryCount">Number of retry attempts when releasing a reservation fails. Defaults to 1.</param>
+        public EmailReservationHelper(IDocumentStore documentStore, ILogger<EmailReservationHelper> logger = null, int releaseRetryCount = 1)
+            : base(documentStore, "email", logger, releaseRetryCount)
+        {
+        }
+
+        /// <inheritdoc />
+        protected override string BuildKey(string normalizedValue)
+            => CompareExchangeKeys.ForEmail(normalizedValue);
+    }
+}

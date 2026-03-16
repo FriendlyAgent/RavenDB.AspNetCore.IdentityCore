@@ -1,10 +1,11 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Raven.Client.Documents.Session;
 using Raven.Client.Exceptions;
-using Raven.Client.Exceptions.Documents.Session;
 using RavenDB.AspNetCore.IdentityCore.Entities;
-using RavenDB.AspNetCore.IdentityCore.Entities.UniqueConstraints;
+using RavenDB.AspNetCore.IdentityCore.Helpers;
+using RavenDB.AspNetCore.IdentityCore.QueryHandlers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,13 +25,17 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// Constructs a new instance of <see cref="RavenRoleStore"/>.
         /// </summary>
         /// <param name="session">The <see cref="IAsyncDocumentSession"/>.</param>
-        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
+        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provide error messages.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="queryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenRoleStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
-            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer)
+            IOptions<RavenIdentityRoleOptions<RavenIdentityRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null,
+            IRoleQueryHandler<RavenIdentityRole, IAsyncDocumentSession> queryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, ravenRoleOptionsAccessor, queryHandler, loggerFactory)
         {
         }
     }
@@ -47,13 +52,17 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// Constructs a new instance of <see cref="RavenRoleStore"/>.
         /// </summary>
         /// <param name="session">The <see cref="IAsyncDocumentSession"/>.</param>
-        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
+        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provide error messages.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="queryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenRoleStore(
             IAsyncDocumentSession session,
             IdentityErrorDescriber describer = null,
-            IOptions<RavenIdentityRoleOptions<TRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, IAsyncDocumentSession>> ravenRoleOptionsAccessor = null,
+            IRoleQueryHandler<TRole, IAsyncDocumentSession> queryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, ravenRoleOptionsAccessor, queryHandler, loggerFactory)
         {
         }
     }
@@ -73,13 +82,17 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// Constructs a new instance of <see cref="RavenRoleStore"/>.
         /// </summary>
         /// <param name="session">The <see cref="IAsyncDocumentSession"/>.</param>
-        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
+        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provide error messages.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="queryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenRoleStore(
             TSession session,
             IdentityErrorDescriber describer = null,
-            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null)
-            : base(session, describer, ravenRoleOptionsAccessor)
+            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null,
+            IRoleQueryHandler<TRole, TSession> queryHandler = null,
+            ILoggerFactory loggerFactory = null)
+            : base(session, describer, ravenRoleOptionsAccessor, queryHandler, loggerFactory)
         {
         }
     }
@@ -91,7 +104,8 @@ namespace RavenDB.AspNetCore.IdentityCore
     /// <typeparam name="TSession">The type of the data context class used to access the session.</typeparam>
     /// <typeparam name="TRoleClaim">The type of the class representing a role claim.</typeparam>
     public class RavenRoleStore<TRole, TSession, TRoleClaim> :
-        IRoleClaimStore<TRole>
+        IRoleClaimStore<TRole>,
+        IQueryableRoleStore<TRole>
         where TRole : RavenIdentityRole
         where TSession : IAsyncDocumentSession
         where TRoleClaim : RavenIdentityRoleClaim, new()
@@ -107,27 +121,68 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <summary>
         /// Gets or sets the <see cref="IdentityErrorDescriber"/> for any error that occurred with the current operation.
         /// </summary>
-        private IdentityErrorDescriber ErrorDescriber { get; set; }
+        public IdentityErrorDescriber ErrorDescriber { get; set; }
 
         /// <summary>
         /// The <see cref="RavenIdentityRoleOptions"/> used to configure Raven Identity.
         /// </summary>
-        private RavenIdentityRoleOptions<TRole, TSession> RavenRoleOptions { get; set; }
+        public RavenIdentityRoleOptions<TRole, TSession> RavenRoleOptions { get; set; }
+
+        /// <summary>
+        /// The query handler used for querying roles.
+        /// </summary>
+        protected IRoleQueryHandler<TRole, TSession> QueryHandler { get; set; }
+
+        /// <summary>
+        /// The helper for managing role name reservations.
+        /// </summary>
+        private RoleNameReservationHelper RoleNameReservation { get; set; }
 
         private TSession _session;
 
         private bool _disposed;
 
         /// <summary>
+        /// Gets an IQueryable of roles. NOT SUPPORTED - throws <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This property is required by the <see cref="IQueryableRoleStore{TRole}"/> interface from
+        /// ASP.NET Core Identity, which is outside of our control. However, RavenDB uses an async
+        /// document session model that is fundamentally incompatible with <see cref="IQueryable{T}"/>.
+        /// Exposing a queryable here would bypass RavenDB's session lifetime management and could lead
+        /// to unexpected behavior with deferred query execution.
+        /// </para>
+        /// <para>
+        /// Instead, inject <see cref="IAsyncDocumentSession"/> and query roles directly:
+        /// </para>
+        /// <code>
+        /// // Instead of: roleManager.Roles.Where(r => ...)
+        /// // Use: session.Query&lt;TRole&gt;().Where(r => ...)
+        /// </code>
+        /// </remarks>
+        /// <exception cref="NotSupportedException">Always thrown when accessed.</exception>
+        public IQueryable<TRole> Roles =>
+            throw new NotSupportedException(
+                "IQueryable access via RoleManager.Roles is not supported. " +
+                "RavenDB's async document session model is incompatible with IQueryable. " +
+                "This property exists because the IQueryableRoleStore<TRole> interface requires it. " +
+                "Inject IAsyncDocumentSession and use session.Query<TRole>() instead.");
+
+        /// <summary>
         /// Constructs a new instance of <see cref="RavenRoleStore"/>.
         /// </summary>
         /// <param name="session">The <see cref="IAsyncDocumentSession"/>.</param>
-        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provider error messages.</param>
+        /// <param name="describer">The <see cref="IdentityErrorDescriber"/> used to provide error messages.</param>
         /// <param name="ravenRoleOptionsAccessor">The configured <see cref="RavenIdentityRoleOptions"/>.</param>
+        /// <param name="queryHandler">The query handler for role queries. If not provided, uses the default implementation.</param>
+        /// <param name="loggerFactory">Optional logger factory for structured logging of Compare Exchange operations.</param>
         public RavenRoleStore(
             TSession session,
             IdentityErrorDescriber describer = null,
-            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null)
+            IOptions<RavenIdentityRoleOptions<TRole, TSession>> ravenRoleOptionsAccessor = null,
+            IRoleQueryHandler<TRole, TSession> queryHandler = null,
+            ILoggerFactory loggerFactory = null)
         {
             if (session == null)
                 throw new ArgumentNullException(nameof(session));
@@ -137,15 +192,24 @@ namespace RavenDB.AspNetCore.IdentityCore
             ErrorDescriber = describer ?? new IdentityErrorDescriber();
 
             RavenRoleOptions = ravenRoleOptionsAccessor?.Value ?? new RavenIdentityRoleOptions<TRole, TSession>();
+
+            QueryHandler = queryHandler ?? new DefaultRoleQueryHandler<TRole, TSession>(Microsoft.Extensions.Options.Options.Create(RavenRoleOptions));
+
+            RoleNameReservation = new RoleNameReservationHelper(
+                session.Advanced.DocumentStore,
+                logger: loggerFactory?.CreateLogger<RoleNameReservationHelper>(),
+                releaseRetryCount: RavenRoleOptions.ReservationReleaseRetryCount);
+
+            AutoSaveChanges = RavenRoleOptions.AutoSaveChanges;
         }
 
         /// <summary>
-        /// Creates a entity representing a role claim.
+        /// Creates an entity representing a role claim.
         /// </summary>
         /// <param name="role">The associated role.</param>
         /// <param name="claim">The associated claim.</param>
         /// <returns>The role claim entity.</returns>
-        protected virtual TRoleClaim CreaterRoleClaim(TRole role, Claim claim)
+        protected virtual TRoleClaim CreateRoleClaim(TRole role, Claim claim)
         {
             if (role.Claims.Any(x => x.Equals(claim)))
                 throw new InvalidOperationException("Claim already exists.");
@@ -167,24 +231,13 @@ namespace RavenDB.AspNetCore.IdentityCore
         public virtual Task AddClaimAsync(TRole role, Claim claim, CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
 
-            if (claim == null)
-                throw new ArgumentNullException(nameof(claim));
+            ArgumentNullException.ThrowIfNull(role);
 
-            role.Claims.Add(CreaterRoleClaim(role, claim));
-            return Task.FromResult(false);
-        }
+            ArgumentNullException.ThrowIfNull(claim);
 
-        /// <summary>
-        /// Creates a constraint on the role name.
-        /// </summary>
-        /// <param name="role">The role for which to create the constraint.</param>
-        /// <returns></returns>
-        public static UniqueRoleName ToRoleNameConstraint(RavenIdentityRole role)
-        {
-            return new UniqueRoleName(role.RoleName);
+            role.Claims.Add(CreateRoleClaim(role, claim));
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -197,59 +250,45 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
 
-            var previousOptimisticConcurrency = _session.Advanced.UseOptimisticConcurrency;
-            var uniqueRoleNameConstraint = ToRoleNameConstraint(role);
-            try
+            ArgumentNullException.ThrowIfNull(role);
+
+            var normalizedRoleName = role.NormalizedRoleName ?? role.RoleName;
+
+            if (RavenRoleOptions.EnforceUniqueConstraints)
             {
-                _session.Advanced.UseOptimisticConcurrency = true;
+                var reserved = await RoleNameReservation.TryReserveAsync(normalizedRoleName, "pending", cancellationToken);
 
-                await _session
-                    .StoreAsync(uniqueRoleNameConstraint, cancellationToken)
-                    .ConfigureAwait(false);
-
-                await SaveChanges(cancellationToken: cancellationToken);
-
-                await _session
-                    .StoreAsync(role, cancellationToken)
-                    .ConfigureAwait(false);
-
-                uniqueRoleNameConstraint.RelationId = role.Id;
-
-                await SaveChanges(cancellationToken: cancellationToken);
-            }
-            catch (ConcurrencyException ex)
-            {
-                _session.Advanced.Evict(uniqueRoleNameConstraint);
-                _session.Advanced.Evict(role);
-
-                if (ex.Message.Contains(uniqueRoleNameConstraint.Id)) // RoleName error
+                if (!reserved)
                 {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
+                    return IdentityResult.Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
                 }
 
-                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
-            }
-            catch (NonUniqueObjectException ex)
-            {
-                _session.Advanced.Evict(uniqueRoleNameConstraint);
-                _session.Advanced.Evict(role);
-
-                if (ex.Message
-                    .Contains(uniqueRoleNameConstraint.Id)) // RoleName error
+                try
                 {
-                    return IdentityResult
-                        .Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
-                }
+                    await _session.StoreAsync(role, cancellationToken).ConfigureAwait(false);
 
-                throw;
+                    var updated = await RoleNameReservation.TryUpdateAsync(normalizedRoleName, role.Id, cancellationToken);
+                    if (!updated)
+                    {
+                        _session.Advanced.Evict(role);
+                        await RoleNameReservation.TryReleaseAsync(normalizedRoleName, cancellationToken);
+                        return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                    }
+
+                    await SaveChanges(cancellationToken: cancellationToken);
+                }
+                catch (Exception)
+                {
+                    _session.Advanced.Evict(role);
+                    await RoleNameReservation.TryReleaseAsync(normalizedRoleName, cancellationToken);
+                    throw;
+                }
             }
-            finally
+            else
             {
-                _session.Advanced.UseOptimisticConcurrency = previousOptimisticConcurrency;
+                await _session.StoreAsync(role, cancellationToken).ConfigureAwait(false);
+                await SaveChanges(cancellationToken: cancellationToken);
             }
 
             return IdentityResult.Success;
@@ -265,17 +304,20 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
+
+            var normalizedRoleName = role.NormalizedRoleName ?? role.RoleName;
 
             try
             {
-                var uniqueRoleNameConstraint = ToRoleNameConstraint(role);
-
-                _session.Delete(uniqueRoleNameConstraint.Id);
                 _session.Delete(role);
-
                 await SaveChanges(cancellationToken: cancellationToken);
+
+                if (RavenRoleOptions.EnforceUniqueConstraints)
+                {
+                    await RoleNameReservation.TryReleaseAsync(normalizedRoleName, cancellationToken);
+                }
             }
             catch (ConcurrencyException)
             {
@@ -295,8 +337,8 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (roleId == null)
-                throw new ArgumentNullException(nameof(roleId));
+
+            ArgumentNullException.ThrowIfNull(roleId);
 
             return _session.LoadAsync<TRole>(roleId, cancellationToken);
         }
@@ -311,12 +353,11 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (normalizedRoleName == null)
-                throw new ArgumentNullException(nameof(normalizedRoleName));
 
-            return await RavenRoleOptions
-                .Query
-                .GetRoleByNameAsync(_session, normalizedRoleName, cancellationToken);
+            ArgumentNullException.ThrowIfNull(normalizedRoleName);
+
+            return await QueryHandler
+                .GetByNameAsync(_session, normalizedRoleName, cancellationToken);
         }
 
         /// <summary>
@@ -328,8 +369,8 @@ namespace RavenDB.AspNetCore.IdentityCore
         public virtual Task<IList<Claim>> GetClaimsAsync(TRole role, CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
 
             var claims = role.Claims.
                 Select(claim => claim
@@ -349,8 +390,8 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
 
             return Task.FromResult(role.NormalizedRoleName);
         }
@@ -365,8 +406,8 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
 
             return Task.FromResult(role.Id);
         }
@@ -381,8 +422,8 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
 
             return Task.FromResult(role.RoleName);
         }
@@ -396,13 +437,20 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
         public virtual Task RemoveClaimAsync(TRole role, Claim claim, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfDisposed();
+
+            ArgumentNullException.ThrowIfNull(role);
+
+            ArgumentNullException.ThrowIfNull(claim);
+
             var userClaim = role.Claims
                 .SingleOrDefault(a => a.Equals(claim));
 
             if (userClaim != null)
                 role.Claims.Remove(userClaim);
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -416,11 +464,12 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
+
             role.NormalizedRoleName = normalizedName ?? throw new ArgumentNullException(nameof(normalizedName));
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -434,12 +483,12 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
 
             role.RoleName = roleName;
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -452,18 +501,80 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            if (role == null)
-                throw new ArgumentNullException(nameof(role));
+
+            ArgumentNullException.ThrowIfNull(role);
+
+            // Check what changed in this session
+            var changes = _session.Advanced.WhatChanged();
+            var hasRoleChanged = changes.TryGetValue(role.Id, out var roleChanges);
+
+            if (!hasRoleChanged || roleChanges == null || roleChanges.Length == 0)
+            {
+                // No changes to this document
+                return IdentityResult.Success;
+            }
+
+            // Check for role name change
+            var nameChange = roleChanges.FirstOrDefault(c =>
+                c.FieldName == nameof(role.NormalizedRoleName) || c.FieldName == nameof(role.RoleName));
+
+            if (nameChange == null || !RavenRoleOptions.EnforceUniqueConstraints)
+            {
+                // Role name didn't change or unique constraints disabled, just save normally
+                try
+                {
+                    role.ConcurrencyStamp = Guid.NewGuid().ToString();
+                    await SaveChanges(cancellationToken: cancellationToken);
+                }
+                catch (ConcurrencyException)
+                {
+                    return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                }
+
+                return IdentityResult.Success;
+            }
+
+            // Role name changed, need to update compare-exchange reservation
+            var oldNormalizedName = nameChange.FieldOldValue?.ToString();
+            var currentNormalizedName = role.NormalizedRoleName ?? role.RoleName;
+
+            // Check if it's actually a meaningful change (not just case change)
+            if (string.IsNullOrEmpty(oldNormalizedName) ||
+                string.Equals(oldNormalizedName, currentNormalizedName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Just a case change or invalid old value, save normally
+                try
+                {
+                    role.ConcurrencyStamp = Guid.NewGuid().ToString();
+                    await SaveChanges(cancellationToken: cancellationToken);
+                }
+                catch (ConcurrencyException)
+                {
+                    return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                }
+
+                return IdentityResult.Success;
+            }
+
+            // Real name change detected, update compare-exchange
+            var reserved = await RoleNameReservation.TryReserveAsync(currentNormalizedName, role.Id, cancellationToken);
+
+            if (!reserved)
+            {
+                return IdentityResult.Failed(ErrorDescriber.DuplicateRoleName(role.RoleName));
+            }
 
             try
             {
                 role.ConcurrencyStamp = Guid.NewGuid().ToString();
-
                 await SaveChanges(cancellationToken: cancellationToken);
+
+                await RoleNameReservation.TryReleaseAsync(oldNormalizedName, cancellationToken);
             }
-            catch (ConcurrencyException)
+            catch (Exception)
             {
-                return IdentityResult.Failed(ErrorDescriber.ConcurrencyFailure());
+                await RoleNameReservation.TryReleaseAsync(currentNormalizedName, cancellationToken);
+                throw;
             }
 
             return IdentityResult.Success;
@@ -487,8 +598,7 @@ namespace RavenDB.AspNetCore.IdentityCore
         /// </summary>
         protected void ThrowIfDisposed()
         {
-            if (_disposed)
-                throw new ObjectDisposedException(GetType().Name);
+            ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
         /// <summary>
@@ -499,9 +609,7 @@ namespace RavenDB.AspNetCore.IdentityCore
         {
             if (disposing)
             {
-                if (_session != null)
-                    _session = default;
-
+                _session = default;
                 _disposed = true;
             }
         }
